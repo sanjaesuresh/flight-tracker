@@ -1,0 +1,36 @@
+# planning docs stay LOCAL-ONLY — never publish design/decisions/research to the public repo
+docs/
+
+# SDD progress ledger (scratch, not source)
+.superpowers/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# virtual envs
+venv/
+.venv/
+env/
+ENV/
+
+# build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# spike output (generated artifact, not source)
+spike_fixture.json
+
+# OS
+.DS_Store

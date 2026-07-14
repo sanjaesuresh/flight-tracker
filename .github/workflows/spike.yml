@@ -1,0 +1,31 @@
+name: Phase 0 feasibility spike
+
+# manual only - this is a throwaway experiment, not a scheduled poller, so no cron trigger.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  spike:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run feasibility spike
+        run: python spike/spike.py
+
+      # spike_fixture.json has no secrets/personal data (see spike.py) - it's the
+      # generated fixture that a later task turns into a contract-test fixture.
+      - name: Upload spike fixture
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spike-fixture
+          path: spike_fixture.json
+          if-no-files-found: warn
