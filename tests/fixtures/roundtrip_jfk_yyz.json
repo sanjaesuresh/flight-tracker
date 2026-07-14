@@ -1,0 +1,486 @@
+[
+  {
+    "type": "AA",
+    "price": 417,
+    "airlines": [
+      "American"
+    ],
+    "flights": [
+      {
+        "from_airport": {
+          "name": "John F. Kennedy International Airport",
+          "code": "JFK"
+        },
+        "to_airport": {
+          "name": "Ronald Reagan Washington National Airport",
+          "code": "DCA"
+        },
+        "departure": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            6,
+            30
+          ]
+        },
+        "arrival": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            7,
+            59
+          ]
+        },
+        "duration": 89,
+        "plane_type": "Embraer 175"
+      },
+      {
+        "from_airport": {
+          "name": "Ronald Reagan Washington National Airport",
+          "code": "DCA"
+        },
+        "to_airport": {
+          "name": "Toronto Pearson International Airport",
+          "code": "YYZ"
+        },
+        "departure": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            14,
+            58
+          ]
+        },
+        "arrival": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            16,
+            45
+          ]
+        },
+        "duration": 107,
+        "plane_type": "Canadair RJ 700"
+      }
+    ],
+    "carbon": {
+      "typical_on_route": 91000,
+      "emission": 192000
+    }
+  },
+  {
+    "type": "AA",
+    "price": 417,
+    "airlines": [
+      "American"
+    ],
+    "flights": [
+      {
+        "from_airport": {
+          "name": "John F. Kennedy International Airport",
+          "code": "JFK"
+        },
+        "to_airport": {
+          "name": "Ronald Reagan Washington National Airport",
+          "code": "DCA"
+        },
+        "departure": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            22
+          ]
+        },
+        "arrival": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            23,
+            31
+          ]
+        },
+        "duration": 91,
+        "plane_type": "Embraer 175"
+      },
+      {
+        "from_airport": {
+          "name": "Ronald Reagan Washington National Airport",
+          "code": "DCA"
+        },
+        "to_airport": {
+          "name": "Toronto Pearson International Airport",
+          "code": "YYZ"
+        },
+        "departure": {
+          "date": [
+            2026,
+            8,
+            5
+          ],
+          "time": [
+            10,
+            15
+          ]
+        },
+        "arrival": {
+          "date": [
+            2026,
+            8,
+            5
+          ],
+          "time": [
+            11,
+            59
+          ]
+        },
+        "duration": 104,
+        "plane_type": "Canadair RJ 700"
+      }
+    ],
+    "carbon": {
+      "typical_on_route": 91000,
+      "emission": 192000
+    }
+  },
+  {
+    "type": "AA",
+    "price": 492,
+    "airlines": [
+      "American"
+    ],
+    "flights": [
+      {
+        "from_airport": {
+          "name": "John F. Kennedy International Airport",
+          "code": "JFK"
+        },
+        "to_airport": {
+          "name": "Ronald Reagan Washington National Airport",
+          "code": "DCA"
+        },
+        "departure": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            9,
+            30
+          ]
+        },
+        "arrival": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            10,
+            59
+          ]
+        },
+        "duration": 89,
+        "plane_type": "Embraer 175"
+      },
+      {
+        "from_airport": {
+          "name": "Ronald Reagan Washington National Airport",
+          "code": "DCA"
+        },
+        "to_airport": {
+          "name": "Toronto Pearson International Airport",
+          "code": "YYZ"
+        },
+        "departure": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            14,
+            58
+          ]
+        },
+        "arrival": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            16,
+            45
+          ]
+        },
+        "duration": 107,
+        "plane_type": "Canadair RJ 700"
+      }
+    ],
+    "carbon": {
+      "typical_on_route": 91000,
+      "emission": 192000
+    }
+  },
+  {
+    "type": "AA",
+    "price": 556,
+    "airlines": [
+      "American"
+    ],
+    "flights": [
+      {
+        "from_airport": {
+          "name": "John F. Kennedy International Airport",
+          "code": "JFK"
+        },
+        "to_airport": {
+          "name": "Ronald Reagan Washington National Airport",
+          "code": "DCA"
+        },
+        "departure": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            6,
+            30
+          ]
+        },
+        "arrival": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            7,
+            59
+          ]
+        },
+        "duration": 89,
+        "plane_type": "Embraer 175"
+      },
+      {
+        "from_airport": {
+          "name": "Ronald Reagan Washington National Airport",
+          "code": "DCA"
+        },
+        "to_airport": {
+          "name": "Toronto Pearson International Airport",
+          "code": "YYZ"
+        },
+        "departure": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            10,
+            15
+          ]
+        },
+        "arrival": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            11,
+            59
+          ]
+        },
+        "duration": 104,
+        "plane_type": "Canadair RJ 700"
+      }
+    ],
+    "carbon": {
+      "typical_on_route": 91000,
+      "emission": 192000
+    }
+  },
+  {
+    "type": "AA",
+    "price": 835,
+    "airlines": [
+      "American"
+    ],
+    "flights": [
+      {
+        "from_airport": {
+          "name": "John F. Kennedy International Airport",
+          "code": "JFK"
+        },
+        "to_airport": {
+          "name": "Charlotte Douglas International Airport",
+          "code": "CLT"
+        },
+        "departure": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            5,
+            59
+          ]
+        },
+        "arrival": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            7,
+            57
+          ]
+        },
+        "duration": 118,
+        "plane_type": "Boeing 737MAX 8 Passenger"
+      },
+      {
+        "from_airport": {
+          "name": "Charlotte Douglas International Airport",
+          "code": "CLT"
+        },
+        "to_airport": {
+          "name": "Toronto Pearson International Airport",
+          "code": "YYZ"
+        },
+        "departure": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            9,
+            1
+          ]
+        },
+        "arrival": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            11,
+            14
+          ]
+        },
+        "duration": 133,
+        "plane_type": "Canadair RJ 900"
+      }
+    ],
+    "carbon": {
+      "typical_on_route": 91000,
+      "emission": 231000
+    }
+  },
+  {
+    "type": "DL",
+    "price": 843,
+    "airlines": [
+      "Delta"
+    ],
+    "flights": [
+      {
+        "from_airport": {
+          "name": "John F. Kennedy International Airport",
+          "code": "JFK"
+        },
+        "to_airport": {
+          "name": "Detroit Metropolitan Wayne County Airport",
+          "code": "DTW"
+        },
+        "departure": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            7,
+            10
+          ]
+        },
+        "arrival": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            9,
+            20
+          ]
+        },
+        "duration": 130,
+        "plane_type": "Canadair RJ 900"
+      },
+      {
+        "from_airport": {
+          "name": "Detroit Metropolitan Wayne County Airport",
+          "code": "DTW"
+        },
+        "to_airport": {
+          "name": "Toronto Pearson International Airport",
+          "code": "YYZ"
+        },
+        "departure": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            10
+          ]
+        },
+        "arrival": {
+          "date": [
+            2026,
+            8,
+            4
+          ],
+          "time": [
+            11,
+            19
+          ]
+        },
+        "duration": 79,
+        "plane_type": "Canadair RJ 900"
+      }
+    ],
+    "carbon": {
+      "typical_on_route": 91000,
+      "emission": 191000
+    }
+  }
+]
