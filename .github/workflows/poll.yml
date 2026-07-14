@@ -1,0 +1,46 @@
+name: Hourly flight poll
+
+# minute 7 (not :00) to dodge top-of-hour Actions congestion; plus manual runs.
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch: {}
+
+# never let two polls overlap: a run in progress makes a new one wait rather than
+# run concurrently, so the alert-dedup read-check-insert is never raced.
+concurrency:
+  group: poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run poller
+        # secrets injected as env vars only; no step echoes them (logs are public).
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          set +e
+          python -m poller.main
+          code=$?
+          echo "poller exit code: $code"
+          # Only the 3rd-consecutive-failure signal (exit 2) fails the job, so GitHub's
+          # workflow-failure email fires then. A single/transient total failure (exit 1)
+          # is recorded in poller_state but kept green to avoid alarm noise; it becomes
+          # exit 2 (and an email) if it happens 3 polls in a row.
+          [ "$code" -eq 2 ] && exit 1
+          exit 0
