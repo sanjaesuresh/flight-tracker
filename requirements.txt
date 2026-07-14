@@ -4,3 +4,4 @@ fast-flights==3.0.2
 # import override`) and fails at import time without it - pinning it here as a
 # workaround for a real upstream packaging gap (confirmed via clean-venv install).
 typing_extensions
+psycopg[binary]
