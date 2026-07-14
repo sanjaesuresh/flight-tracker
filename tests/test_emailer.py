@@ -211,3 +211,20 @@ def test_send_alerts_one_failure_does_not_stop_the_others():
 
     assert results[1].sent is True
     assert results[1].error is None
+
+
+def test_send_alerts_logs_failure_without_leaking_recipient(caplog):
+    settings = make_settings(dry_run=False, alert_email="recipient@example.com")
+    config = make_config()
+    trip = make_trip(price_usd=218)
+    decision = Decision(fires=True, reasons={"threshold"}, baseline=None)
+    transport = FakeTransport(raise_on_call_index=0)
+
+    with caplog.at_level("WARNING"):
+        send_alerts([(trip, decision)], settings, config, transport)
+
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert "RuntimeError" in warnings[0].getMessage()
+    # never leak the recipient address into logs, even on a send failure
+    assert not any("recipient@example.com" in r.getMessage() for r in caplog.records)

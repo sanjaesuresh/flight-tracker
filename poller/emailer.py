@@ -5,6 +5,7 @@ a real network/SMTP server. `send_alerts` itself never logs or prints the
 recipient address -- it only appears inside the returned AlertResult objects,
 which callers own and can handle however they like.
 """
+import logging
 import smtplib
 from dataclasses import dataclass
 from email.message import EmailMessage
@@ -12,6 +13,8 @@ from email.message import EmailMessage
 from poller.config import Config
 from poller.models import Settings, Trip
 from poller.rules import Decision
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -136,7 +139,10 @@ def send_alerts(
         try:
             transport(config.gmail_address, recipient, subject, body)
         except Exception as exc:
-            # never log `recipient` here -- only the AlertResult carries it
+            # never log `recipient` here -- only the AlertResult carries it;
+            # a bare exception-type name is enough to diagnose without PII,
+            # and it's what surfaced this bug: silent failures had no signal at all
+            logger.warning("alert send failed: %s", type(exc).__name__)
             results.append(
                 AlertResult(
                     subject=subject, body=body, recipient=recipient,

@@ -41,5 +41,7 @@ def load_config() -> Config:
     return Config(
         database_url=values["DATABASE_URL"],
         gmail_address=values["GMAIL_ADDRESS"],
-        gmail_app_password=values["GMAIL_APP_PASSWORD"],
+        # Google displays the app password space-grouped and users paste it
+        # verbatim; strip spaces here so SMTP auth doesn't silently fail.
+        gmail_app_password=values["GMAIL_APP_PASSWORD"].replace(" ", ""),
     )

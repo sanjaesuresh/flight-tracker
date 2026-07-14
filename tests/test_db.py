@@ -231,6 +231,19 @@ def test_missing_env_named(monkeypatch):
     assert "GMAIL_APP_PASSWORD" in str(exc_info.value)
 
 
+def test_app_password_whitespace_stripped(monkeypatch):
+    # Google displays the 16-char app password in space-separated groups and
+    # users paste it verbatim -- load_config must strip all spaces so SMTP
+    # login doesn't silently fail against the space-containing string.
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@host/db")
+    monkeypatch.setenv("GMAIL_ADDRESS", "user@example.com")
+    monkeypatch.setenv("GMAIL_APP_PASSWORD", "abcd efgh ijkl mnop")
+
+    config = load_config()
+
+    assert config.gmail_app_password == "abcdefghijklmnop"
+
+
 # ---------------------------------------------------------------------------
 # Fake conn for the new run_poll-support helpers below. Mirrors
 # tests/test_snapshots.py's _EventsOnlyConn/_ReadCursor style: records the
