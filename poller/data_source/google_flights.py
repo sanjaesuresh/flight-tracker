@@ -10,6 +10,7 @@ would break every test collection here. GoogleFlightsSource takes an
 injected fetch_fn/sleep_fn/rng so tests exercise the rotation, budget, and
 pacing logic without the library or network.
 """
+import logging
 import random
 import time as time_module
 from datetime import date
@@ -17,6 +18,8 @@ from datetime import date
 from poller.data_source.base import DataSource
 from poller.data_source.normalize import normalize_offers
 from poller.models import Offer, SearchRequest
+
+logger = logging.getLogger(__name__)
 
 
 def _build_query_kwargs(request: SearchRequest) -> dict:
@@ -125,13 +128,26 @@ class GoogleFlightsSource(DataSource):
             request = candidates[index]
             try:
                 offers = self.search(request)
-            except Exception:
+            except Exception as exc:
                 # best-effort: one bad candidate shouldn't abort the rest of
-                # the budgeted slice -- record no offers and keep going, but
-                # count the raise so callers can tell it apart from a
-                # zero-offer success.
+                # the budgeted slice -- record no offers and keep going.
                 offers = []
-                failed_count += 1
+                # checked by class NAME (not isinstance) so this module never
+                # imports fast_flights -- FlightsNotFound just means "no
+                # flights for this route/date", a legitimate empty result,
+                # not a scrape failure, so it must not inflate failed_count.
+                if type(exc).__name__ == "FlightsNotFound":
+                    pass
+                else:
+                    failed_count += 1
+                    # O-D codes + exception type only -- never the dates,
+                    # which are the user's identity-linked travel pattern.
+                    logger.warning(
+                        "scrape error for %s->%s: %s",
+                        request.origin,
+                        request.destination,
+                        type(exc).__name__,
+                    )
             results.append((request, offers))
 
         next_cursor = (cursor + count) % total

@@ -46,18 +46,30 @@ def make_candidates(n):
     ]
 
 
+class FlightsNotFound(Exception):
+    """Local stand-in for fast_flights' FlightsNotFound -- confirm_candidates
+    distinguishes it by exception class NAME (never imports fast_flights),
+    so a same-named local class is all that's needed to exercise that path.
+    """
+
+
 class FakeFetch:
     """Records calls and returns the recorded fixture + a fake booking URL."""
 
-    def __init__(self, raw=None, raise_on=None):
+    def __init__(self, raw=None, raise_on=None, raise_exc_by_date=None):
         self.raw = raw if raw is not None else load_fixture()
         self.calls: list[SearchRequest] = []
         # optional set of request identities (by outbound_date) to raise on,
         # for the best-effort partial-failure test.
         self.raise_on = raise_on or set()
+        # optional dict of outbound_date -> exception instance, for tests
+        # that need to distinguish which exception type is raised per date.
+        self.raise_exc_by_date = raise_exc_by_date or {}
 
     def __call__(self, request: SearchRequest):
         self.calls.append(request)
+        if request.outbound_date in self.raise_exc_by_date:
+            raise self.raise_exc_by_date[request.outbound_date]
         if request.outbound_date in self.raise_on:
             raise RuntimeError("simulated scrape failure")
         return self.raw, "https://www.google.com/travel/flights/search?tfs=fake"
@@ -216,6 +228,34 @@ def test_a_single_failing_search_is_best_effort_and_does_not_abort_the_slice():
     assert len(by_request[id(candidates[0])]) >= 1
     assert len(by_request[id(candidates[2])]) >= 1
     assert failed == 1
+
+
+def test_flights_not_found_is_an_empty_result_not_a_failure():
+    candidates = make_candidates(3)
+    not_found_date = candidates[0].outbound_date
+    real_error_date = candidates[1].outbound_date
+    fetch = FakeFetch(
+        raise_exc_by_date={
+            not_found_date: FlightsNotFound("no flights"),
+            real_error_date: RuntimeError("simulated scrape failure"),
+        }
+    )
+    sleep = FakeSleep()
+    source = GoogleFlightsSource(budget=3, fetch_fn=fetch, sleep_fn=sleep, rng=FixedRng())
+
+    offers_by_request, next_cursor, failed = source.confirm_candidates(candidates, cursor=0)
+
+    by_request = dict(zip((id(r) for r, _ in offers_by_request), (o for _, o in offers_by_request)))
+    assert len(fetch.calls) == 3
+    # both failing candidates still show up with an empty offers list --
+    # best-effort continues regardless of exception type.
+    assert by_request[id(candidates[0])] == []
+    assert by_request[id(candidates[1])] == []
+    assert len(by_request[id(candidates[2])]) >= 1
+    # only the RuntimeError counts as a failure; FlightsNotFound is a
+    # legitimate empty result and must not inflate failed_count.
+    assert failed == 1
+    assert next_cursor == 0  # (0 + 3) % 3 wraps back to the start
 
 
 def test_coarse_scan_raises_not_implemented():
