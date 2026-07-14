@@ -39,9 +39,14 @@ def load_config() -> Config:
         )
 
     return Config(
-        database_url=values["DATABASE_URL"],
-        gmail_address=values["GMAIL_ADDRESS"],
+        # pasted secrets (e.g. via a GitHub Actions secret box) can carry a
+        # trailing newline that breaks SMTP/DB auth just as silently as a
+        # stray space, so strip both ends of these too.
+        database_url=values["DATABASE_URL"].strip(),
+        gmail_address=values["GMAIL_ADDRESS"].strip(),
         # Google displays the app password space-grouped and users paste it
-        # verbatim; strip spaces here so SMTP auth doesn't silently fail.
-        gmail_app_password=values["GMAIL_APP_PASSWORD"].replace(" ", ""),
+        # verbatim; split()/join() strips ALL whitespace (spaces, tabs,
+        # newlines), not just literal spaces, so a trailing newline from a
+        # pasted secret doesn't silently break SMTP auth.
+        gmail_app_password="".join(values["GMAIL_APP_PASSWORD"].split()),
     )

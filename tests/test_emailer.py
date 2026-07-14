@@ -228,3 +228,32 @@ def test_send_alerts_logs_failure_without_leaking_recipient(caplog):
     assert "RuntimeError" in warnings[0].getMessage()
     # never leak the recipient address into logs, even on a send failure
     assert not any("recipient@example.com" in r.getMessage() for r in caplog.records)
+
+
+class _FakeSMTPAuthError(Exception):
+    """Stands in for smtplib.SMTPAuthenticationError, which carries Gmail's
+    actual rejection reason on `smtp_error` (bytes) -- no PII, just useful
+    for telling bad-credentials apart from an IP block."""
+
+    def __init__(self, smtp_error: bytes):
+        super().__init__("auth failed")
+        self.smtp_error = smtp_error
+
+
+def test_send_alerts_logs_smtp_error_detail_without_leaking_recipient(caplog):
+    settings = make_settings(dry_run=False, alert_email="recipient@example.com")
+    config = make_config()
+    trip = make_trip(price_usd=218)
+    decision = Decision(fires=True, reasons={"threshold"}, baseline=None)
+
+    def transport(from_addr, to_addr, subject, body):
+        raise _FakeSMTPAuthError(smtp_error=b"5.7.8 Username and Password not accepted")
+
+    with caplog.at_level("WARNING"):
+        send_alerts([(trip, decision)], settings, config, transport)
+
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "Username and Password not accepted" in message
+    assert "recipient@example.com" not in message

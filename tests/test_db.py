@@ -244,6 +244,32 @@ def test_app_password_whitespace_stripped(monkeypatch):
     assert config.gmail_app_password == "abcdefghijklmnop"
 
 
+def test_app_password_trailing_newline_stripped(monkeypatch):
+    # a secret pasted into GitHub Actions can carry a trailing newline that a
+    # space-only strip would miss and SMTPAuthenticationError would surface
+    # only as an opaque exception -- split()/join() strips all whitespace,
+    # not just spaces.
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@host/db")
+    monkeypatch.setenv("GMAIL_ADDRESS", "user@example.com")
+    monkeypatch.setenv("GMAIL_APP_PASSWORD", "abcd efgh ijkl mnop\n")
+
+    config = load_config()
+
+    assert config.gmail_app_password == "abcdefghijklmnop"
+
+
+def test_gmail_address_trailing_whitespace_stripped(monkeypatch):
+    # a pasted address can carry a trailing newline/space too, which would
+    # break SMTP login just as silently as the password issue above.
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@host/db")
+    monkeypatch.setenv("GMAIL_ADDRESS", "me@gmail.com\n")
+    monkeypatch.setenv("GMAIL_APP_PASSWORD", "abcdefghijklmnop")
+
+    config = load_config()
+
+    assert config.gmail_address == "me@gmail.com"
+
+
 # ---------------------------------------------------------------------------
 # Fake conn for the new run_poll-support helpers below. Mirrors
 # tests/test_snapshots.py's _EventsOnlyConn/_ReadCursor style: records the

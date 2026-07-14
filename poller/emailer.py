@@ -139,10 +139,16 @@ def send_alerts(
         try:
             transport(config.gmail_address, recipient, subject, body)
         except Exception as exc:
-            # never log `recipient` here -- only the AlertResult carries it;
-            # a bare exception-type name is enough to diagnose without PII,
-            # and it's what surfaced this bug: silent failures had no signal at all
-            logger.warning("alert send failed: %s", type(exc).__name__)
+            # never log `recipient` here -- only the AlertResult carries it.
+            # smtplib's SMTPAuthenticationError (and similar) carry Gmail's
+            # actual rejection text on `smtp_error` (bytes); it names no
+            # recipient/password, just e.g. "5.7.8 Username and Password not
+            # accepted", so logging it tells bad-credentials apart from an
+            # IP block on the next run instead of just an opaque type name.
+            detail = getattr(exc, "smtp_error", b"")
+            if isinstance(detail, bytes):
+                detail = detail.decode("utf-8", errors="replace")
+            logger.warning("alert send failed: %s %s", type(exc).__name__, detail)
             results.append(
                 AlertResult(
                     subject=subject, body=body, recipient=recipient,
