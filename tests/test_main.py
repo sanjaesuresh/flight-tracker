@@ -17,7 +17,7 @@ import pytest
 
 from poller.config import Config
 from poller.models import Offer, Pattern, SearchRequest, Settings
-from poller.main import log_settings_warnings, run_poll
+from poller.main import run_poll
 
 UTC = timezone.utc
 
@@ -85,13 +85,20 @@ class FakeSource:
     failed_count).
     """
 
-    def __init__(self, offers_by_index, next_cursor=1, fail_indices=None):
+    def __init__(self, offers_by_index, next_cursor=1, fail_indices=None, on_call=None):
         self.offers_by_index = offers_by_index
         self.next_cursor = next_cursor
         self.fail_indices = fail_indices or set()
         self.calls = []
+        # optional hook invoked at the start of confirm_candidates -- lets a
+        # test record a marker (e.g. "scrape started") into a shared timeline
+        # alongside connect()/close() events, to prove no connection is held
+        # open across this call.
+        self.on_call = on_call
 
     def confirm_candidates(self, candidates, cursor):
+        if self.on_call is not None:
+            self.on_call()
         self.calls.append((list(candidates), cursor))
         results = []
         for i, request in enumerate(candidates):
@@ -183,6 +190,15 @@ class FakeConn:
     """SQL-dispatching fake connection covering every table run_poll touches:
     settings (read-only fixture), poller_state (read/write), price_snapshots
     (write + the two history reads), alerts_sent (read latest + upsert).
+
+    `close()` only records that it was called -- it does not discard state --
+    because run_poll now opens/closes TWO connections per cycle (a read
+    connection for settings/poller_state, then a fresh write connection for
+    everything else; see run_poll's docstring). Tests hand back this same
+    FakeConn instance for both opens via a `connect` factory (make_connect
+    below) so all the existing state-based assertions (conn.snapshots,
+    conn.poller_state, etc.) keep working unchanged, while `close_count`/
+    still lets tests confirm close() was actually called each time.
     """
 
     def __init__(self, settings_row, poller_state, history=None, raise_on_prune=False):
@@ -198,12 +214,17 @@ class FakeConn:
         # assertions about insert/commit interleaving don't need updating.
         self.prune_deletes = []
         self.raise_on_prune = raise_on_prune
+        self.close_count = 0
 
     def cursor(self):
         return FakeCursor(self)
 
     def commit(self):
         self.events.append(("commit",))
+
+    def close(self):
+        self.close_count += 1
+        self.events.append(("close",))
 
     def _apply_poller_state_update(self, sql, params):
         # set_poller_state builds "col = %s" fragments in a fixed order
@@ -220,6 +241,25 @@ class FakeConn:
             self.poller_state[col] = value
 
 
+def make_connect(conn):
+    """Builds a `connect(config)` callable that hands back the SAME FakeConn
+    every time -- run_poll opens a read connection then later a write
+    connection (two `connect()` calls per cycle), and returning the same
+    backing instance both times lets existing assertions on conn.snapshots/
+    conn.poller_state/etc. keep working without needing two separate fakes
+    to be reconciled.
+    """
+    calls = []
+
+    def connect(config):
+        calls.append(config)
+        conn.events.append(("connect",))
+        return conn
+
+    connect.calls = calls
+    return connect
+
+
 NOW = datetime(2026, 7, 16, 12, 0, tzinfo=UTC)  # a Thursday in UTC
 
 
@@ -231,10 +271,9 @@ def test_full_cycle_below_threshold_sends_one_alert_and_records_it(caplog):
     settings_row = make_settings_row()
     conn = FakeConn(settings_row, {"last_success": None, "consecutive_failures": 0, "cursor": 0})
     source = FakeSource(offers_by_index={0: [make_offer(200)]}, next_cursor=5)
-    settings, _ = _fetch(conn)
     transport = StubTransport()
 
-    code = run_poll(conn, source, settings, make_config(), NOW, transport=transport)
+    code = run_poll(make_config(), source, NOW, connect=make_connect(conn), transport=transport)
 
     assert code == 0
     assert len(conn.snapshots) == 1
@@ -253,18 +292,18 @@ def test_idempotent_rerun_with_unchanged_price_sends_no_second_alert():
     """
     settings_row = make_settings_row()
     conn = FakeConn(settings_row, {"last_success": None, "consecutive_failures": 0, "cursor": 0})
-    settings, _ = _fetch(conn)
+    connect = make_connect(conn)
 
     source1 = FakeSource(offers_by_index={0: [make_offer(200)]}, next_cursor=1)
     transport1 = StubTransport()
-    code1 = run_poll(conn, source1, settings, make_config(), NOW, transport=transport1)
+    code1 = run_poll(make_config(), source1, NOW, connect=connect, transport=transport1)
     assert code1 == 0
     assert len(transport1.calls) == 1
 
     # second run, unchanged price, cursor rotated back to 0 by the source stub
     source2 = FakeSource(offers_by_index={0: [make_offer(200)]}, next_cursor=1)
     transport2 = StubTransport()
-    code2 = run_poll(conn, source2, settings, make_config(), NOW, transport=transport2)
+    code2 = run_poll(make_config(), source2, NOW, connect=connect, transport=transport2)
 
     assert code2 == 0
     assert len(transport2.calls) == 0  # deduped -- no second send
@@ -281,7 +320,6 @@ def test_matrix_offer_actual_airports_drive_snapshots_and_alert_identity_not_the
         preferred_origin="LGA", preferred_destination="YYZ",
     )
     conn = FakeConn(settings_row, {"last_success": None, "consecutive_failures": 0, "cursor": 0})
-    settings, _ = _fetch(conn)
 
     # the offer actually flew EWR->YTZ, distinct from the representative
     # LGA->YYZ pair the matrix candidate carries.
@@ -289,7 +327,7 @@ def test_matrix_offer_actual_airports_drive_snapshots_and_alert_identity_not_the
     source = FakeSource(offers_by_index={0: [offer]}, next_cursor=1)
     transport = StubTransport()
 
-    code = run_poll(conn, source, settings, make_config(), NOW, transport=transport)
+    code = run_poll(make_config(), source, NOW, connect=make_connect(conn), transport=transport)
 
     assert code == 0
     # snapshot row carries the offer's ACTUAL airports.
@@ -329,14 +367,13 @@ def test_partial_success_three_of_four_requests_succeed():
         window_days=21,
     )
     conn = FakeConn(settings_row, {"last_success": None, "consecutive_failures": 2, "cursor": 0})
-    settings, _ = _fetch(conn)
 
     # give every candidate a nonstop offer so at least 3 snapshot-worthy
     # results land regardless of exact expand_patterns output; fail index 1.
     offers_by_index = {i: [make_offer(300 + i)] for i in range(10)}
     source = FakeSource(offers_by_index=offers_by_index, next_cursor=4, fail_indices={1})
 
-    code = run_poll(conn, source, settings, make_config(), NOW, transport=StubTransport())
+    code = run_poll(make_config(), source, NOW, connect=make_connect(conn), transport=StubTransport())
 
     assert code == 0
     assert conn.poller_state["consecutive_failures"] == 0
@@ -362,13 +399,12 @@ def test_healthy_poll_with_zero_offers_everywhere_is_success_not_total_failure()
     """
     settings_row = make_settings_row()
     conn = FakeConn(settings_row, {"last_success": None, "consecutive_failures": 2, "cursor": 0})
-    settings, _ = _fetch(conn)
 
     # offers_by_index empty and fail_indices empty -> every candidate comes
     # back with offers=[] but failed_count is 0 (nothing raised).
     source = FakeSource(offers_by_index={}, next_cursor=2, fail_indices=set())
 
-    code = run_poll(conn, source, settings, make_config(), NOW, transport=StubTransport())
+    code = run_poll(make_config(), source, NOW, connect=make_connect(conn), transport=StubTransport())
 
     assert code == 0
     assert conn.poller_state["consecutive_failures"] == 0
@@ -384,11 +420,10 @@ def test_total_failure_all_requests_fail_returns_1_and_increments_cf():
     """
     settings_row = make_settings_row()
     conn = FakeConn(settings_row, {"last_success": None, "consecutive_failures": 0, "cursor": 0})
-    settings, _ = _fetch(conn)
 
     source = FakeSource(offers_by_index={}, next_cursor=2, fail_indices={0, 1})
 
-    code = run_poll(conn, source, settings, make_config(), NOW, transport=StubTransport())
+    code = run_poll(make_config(), source, NOW, connect=make_connect(conn), transport=StubTransport())
 
     assert code == 1
     assert conn.poller_state["consecutive_failures"] == 1
@@ -400,21 +435,21 @@ def test_total_failure_all_requests_fail_returns_1_and_increments_cf():
 def test_third_consecutive_total_failure_returns_2():
     settings_row = make_settings_row()
     conn = FakeConn(settings_row, {"last_success": None, "consecutive_failures": 2, "cursor": 0})
-    settings, _ = _fetch(conn)
 
     source = FakeSource(offers_by_index={}, next_cursor=3, fail_indices={0, 1})
 
-    code = run_poll(conn, source, settings, make_config(), NOW, transport=StubTransport())
+    code = run_poll(make_config(), source, NOW, connect=make_connect(conn), transport=StubTransport())
 
     assert code == 2
     assert conn.poller_state["consecutive_failures"] == 3
 
 
 def test_privacy_alert_email_never_logged_but_warnings_are(caplog):
-    """A malformed pattern produces a parse_settings warning that must reach
-    the logs (via the same log_settings_warnings helper main() calls after
-    fetch_settings), but settings.alert_email must never appear anywhere in
-    the logs produced by either that call or a full run_poll cycle.
+    """A malformed pattern produces a parse_settings warning that run_poll's
+    read burst surfaces via log_settings_warnings (called internally right
+    after fetch_settings, inside run_poll -- see run_poll's docstring), but
+    settings.alert_email must never appear anywhere in the logs produced by a
+    full run_poll cycle.
     """
     settings_row = make_settings_row(
         alert_email="do-not-leak@example.com",
@@ -423,11 +458,11 @@ def test_privacy_alert_email_never_logged_but_warnings_are(caplog):
     conn = FakeConn(settings_row, {"last_success": None, "consecutive_failures": 0, "cursor": 0})
 
     with caplog.at_level(logging.INFO):
-        settings, warnings = _fetch(conn)
-        assert warnings  # sanity: this row really does produce a warning
-        log_settings_warnings(warnings)
+        # sanity: this row really does produce a warning that log_settings_warnings would log.
+        _, warnings = _fetch(conn)
+        assert warnings
         source = FakeSource(offers_by_index={0: [make_offer(200)]}, next_cursor=1)
-        run_poll(conn, source, settings, make_config(), NOW, transport=StubTransport())
+        run_poll(make_config(), source, NOW, connect=make_connect(conn), transport=StubTransport())
 
     log_text = "\n".join(record.getMessage() for record in caplog.records)
     assert "do-not-leak@example.com" not in log_text
@@ -445,10 +480,9 @@ def test_prune_failure_is_swallowed_and_does_not_fail_an_otherwise_successful_po
         raise_on_prune=True,
     )
     source = FakeSource(offers_by_index={0: [make_offer(200)]}, next_cursor=5)
-    settings, _ = _fetch(conn)
 
     with caplog.at_level(logging.WARNING):
-        code = run_poll(conn, source, settings, make_config(), NOW, transport=StubTransport())
+        code = run_poll(make_config(), source, NOW, connect=make_connect(conn), transport=StubTransport())
 
     assert code == 0  # prune raising must not affect the exit code
     assert conn.poller_state["consecutive_failures"] == 0
@@ -459,6 +493,41 @@ def test_prune_failure_is_swallowed_and_does_not_fail_an_otherwise_successful_po
     assert "snapshot prune failed" in log_text
     assert "RuntimeError" in log_text
     assert settings_row["alert_email"] not in log_text
+
+
+def test_no_connection_held_open_across_the_scrape():
+    """The bug this fix addresses: a single connection held open across the
+    ~12-minute fli scrape goes idle long enough for Neon's free tier to
+    suspend it, so the write phase crashes on a dead connection. Prove the
+    new shape instead -- connect() is called for the READ phase (settings +
+    poller_state), THEN confirm_candidates runs, THEN the read connection is
+    already closed, THEN connect() is called AGAIN for the WRITE phase. That
+    ordering (connect, close, [scrape happens with nothing open], connect)
+    is only possible if no connection is held open across the scrape.
+    """
+    settings_row = make_settings_row()
+    conn = FakeConn(settings_row, {"last_success": None, "consecutive_failures": 0, "cursor": 0})
+    connect = make_connect(conn)
+
+    # marker recorded from inside confirm_candidates itself, into the SAME
+    # events timeline connect()/close() write to -- so we can see exactly
+    # where the scrape falls relative to the connect/close calls.
+    source = FakeSource(
+        offers_by_index={0: [make_offer(200)]},
+        next_cursor=1,
+        on_call=lambda: conn.events.append(("scrape",)),
+    )
+
+    code = run_poll(make_config(), source, NOW, connect=connect, transport=StubTransport())
+
+    assert code == 0
+    assert len(connect.calls) == 2  # one connect() for the read burst, one for the write burst
+
+    event_names = [event[0] for event in conn.events if event[0] in ("connect", "close", "scrape")]
+    # exactly: connect (read) -> close (read) -> scrape -> connect (write) -> close (write).
+    # the key assertion is that "close" appears before "scrape" and another
+    # "connect" appears after it -- proving the scrape ran with NO open connection.
+    assert event_names == ["connect", "close", "scrape", "connect", "close"]
 
 
 def _fetch(conn):

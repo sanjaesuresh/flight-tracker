@@ -50,8 +50,20 @@ def get_connection(config: Config) -> psycopg.Connection:
 
     SSL is whatever the URL itself specifies (Neon URLs include sslmode).
     Kept thin and untested by design — it's a single call to the driver.
+
+    TCP keepalives are defense-in-depth, not the real fix: the real fix for
+    Neon's free-tier idle-suspend is main.run_poll never holding a connection
+    across the long fli scrape (see run_poll's docstring). Keepalives just
+    make an unexpectedly-idle connection fail fast/loud instead of hanging.
     """
-    return psycopg.connect(config.database_url, row_factory=dict_row)
+    return psycopg.connect(
+        config.database_url,
+        row_factory=dict_row,
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=3,
+    )
 
 
 def _parse_time(value: str | None) -> time | None:
