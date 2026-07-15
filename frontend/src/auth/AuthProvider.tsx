@@ -3,7 +3,7 @@
 // and flip local state; any 401 elsewhere calls markLoggedOut() to drop to login.
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { api, ApiError } from '../lib/api.ts';
+import { api, ApiError } from '../lib/api';
 
 type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
 

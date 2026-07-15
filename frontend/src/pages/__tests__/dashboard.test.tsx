@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Dashboard } from '../Dashboard.tsx';
 import { AuthProvider } from '../../auth/AuthProvider.tsx';
-import { api } from '../../lib/api.ts';
-import type { PriceSnapshot } from '../../lib/types.ts';
+import { api } from '../../lib/api';
+import type { PriceSnapshot } from '../../lib/types';
 
 const snap = (p: Partial<PriceSnapshot>): PriceSnapshot => ({
   scraped_at: '2026-07-15T12:00:00Z',

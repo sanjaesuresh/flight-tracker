@@ -2,7 +2,7 @@
 // same functions run under Vite dev, Vercel, and Vitest. All timestamp/date/time
 // columns are cast to strings in SQL so PGlite and the Neon HTTP driver return
 // identical JSON shapes (no driver-dependent Date objects).
-import type { ApiRequest, ApiResponse, Db } from './http.ts';
+import type { ApiRequest, ApiResponse, Db } from './http';
 import type {
   HistoryPoint,
   OptionHistoryPayload,
@@ -10,14 +10,14 @@ import type {
   PriceSnapshot,
   Settings,
   SnapshotsPayload,
-} from '../lib/types.ts';
-import { normalize } from '../lib/settingsSchema.ts';
+} from '../lib/types';
+import { normalize } from '../lib/settingsSchema';
 import {
   checkPassword,
   clearSessionCookie,
   createSessionCookie,
   isAuthenticated,
-} from './auth.ts';
+} from './auth';
 
 const UNAUTHORIZED: ApiResponse = { status: 401, json: { error: 'unauthorized' } };
 

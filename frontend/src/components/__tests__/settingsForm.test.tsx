@@ -3,8 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SettingsForm } from '../SettingsForm.tsx';
 import { AuthProvider } from '../../auth/AuthProvider.tsx';
-import { api } from '../../lib/api.ts';
-import type { Settings } from '../../lib/types.ts';
+import { api } from '../../lib/api';
+import type { Settings } from '../../lib/types';
 
 const base: Settings = {
   origins: ['JFK', 'LGA'],

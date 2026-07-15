@@ -5,8 +5,8 @@ import {
   normalize,
   patternError,
   validateForm,
-} from '../settingsSchema.ts';
-import type { Pattern, SettingsInput } from '../types.ts';
+} from '../settingsSchema';
+import type { Pattern, SettingsInput } from '../types';
 
 const pat = (p: Partial<Pattern>): Pattern => ({
   outbound_weekday: 3,

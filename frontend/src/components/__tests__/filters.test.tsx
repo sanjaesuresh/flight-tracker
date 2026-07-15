@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Filters } from '../Filters.tsx';
-import { emptyFilter } from '../../lib/filter.ts';
+import { emptyFilter } from '../../lib/filter';
 
 describe('Filters', () => {
   it('emits a non-stop filter when Stops is changed', async () => {

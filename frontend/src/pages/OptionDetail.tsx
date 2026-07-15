@@ -4,11 +4,11 @@
 // the authenticated /api/option-history route — the browser never sees the DB.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider.tsx';
-import { api, ApiError } from '../lib/api.ts';
-import type { OptionParams } from '../lib/route.ts';
-import type { OptionHistoryPayload, PriceSnapshot } from '../lib/types.ts';
-import { historyStats } from '../lib/filter.ts';
-import { formatFlightDate, formatTimeOfDay, formatTimestamp } from '../lib/timezone.ts';
+import { api, ApiError } from '../lib/api';
+import type { OptionParams } from '../lib/route';
+import type { OptionHistoryPayload, PriceSnapshot } from '../lib/types';
+import { historyStats } from '../lib/filter';
+import { formatFlightDate, formatTimeOfDay, formatTimestamp } from '../lib/timezone';
 import { OptionPriceChart } from '../components/OptionPriceChart.tsx';
 import { ErrorState, OptionNotFoundState } from '../components/state/States.tsx';
 

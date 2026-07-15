@@ -1,7 +1,7 @@
 // Maps (method, path) → core handler. Shared by the Vite dev middleware and the
 // Vercel catch-all function so routing lives in exactly one place.
-import type { ApiRequest, ApiResponse, Db } from './http.ts';
-import * as h from './handlers.ts';
+import type { ApiRequest, ApiResponse, Db } from './http';
+import * as h from './handlers';
 
 function methodNotAllowed(): ApiResponse {
   return { status: 405, json: { error: 'method_not_allowed' } };

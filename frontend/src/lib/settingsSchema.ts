@@ -6,7 +6,7 @@
 //     disable Save (e.g. an end-before-start window must be impossible to submit).
 //   - normalize(): the poller-mirroring final defense the server applies on PUT —
 //     drops invalid patterns, falls back to defaults, preserves intentional zeros.
-import type { Pattern, SettingsInput } from './types.ts';
+import type { Pattern, SettingsInput } from './types';
 
 export const DEFAULT_THRESHOLD_USD = 250;
 export const DEFAULT_WINDOW_DAYS = 60;

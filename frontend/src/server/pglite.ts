@@ -5,8 +5,8 @@
 import { PGlite } from '@electric-sql/pglite';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { Db } from './http.ts';
-import { addDays, nyTodayString } from '../lib/timezone.ts';
+import type { Db } from './http';
+import { addDays, nyTodayString } from '../lib/timezone';
 
 export type Scenario = 'normal' | 'empty' | 'stale' | 'failing';
 

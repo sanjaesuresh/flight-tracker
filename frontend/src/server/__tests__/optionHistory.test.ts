@@ -2,10 +2,10 @@
 // newest full row plus its own hourly (scraped_at, price_usd) series — proven
 // against the real PGlite schema + seed, same as the other server tests.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { createPgliteDb } from '../pglite.ts';
-import { dispatch } from '../router.ts';
-import type { ApiRequest, Db } from '../http.ts';
-import type { OptionHistoryPayload } from '../../lib/types.ts';
+import { createPgliteDb } from '../pglite';
+import { dispatch } from '../router';
+import type { ApiRequest, Db } from '../http';
+import type { OptionHistoryPayload } from '../../lib/types';
 
 const PW = 'correct-horse';
 

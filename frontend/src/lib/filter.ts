@@ -9,7 +9,7 @@ import type {
   PriceSnapshot,
   RankedOption,
   Settings,
-} from './types.ts';
+} from './types';
 
 // "18:30", "18:30:00" → minutes since midnight; null/malformed → null (unknown).
 function toMinutes(value: string | null | undefined): number | null {

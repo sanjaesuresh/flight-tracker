@@ -7,8 +7,8 @@ import type {
   Settings,
   SettingsInput,
   SnapshotsPayload,
-} from './types.ts';
-import type { OptionParams } from './route.ts';
+} from './types';
+import type { OptionParams } from './route';
 
 export class ApiError extends Error {
   status: number;

@@ -4,15 +4,15 @@
 // re-normalizes on PUT as a final defense; this is the friendly first line.
 import { useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider.tsx';
-import { api, ApiError } from '../lib/api.ts';
-import type { Settings, SettingsInput } from '../lib/types.ts';
+import { api, ApiError } from '../lib/api';
+import type { Settings, SettingsInput } from '../lib/types';
 import {
   FIXED_DESTINATIONS,
   FIXED_ORIGINS,
   hasErrors,
   validateForm,
-} from '../lib/settingsSchema.ts';
-import { formatTimestamp } from '../lib/timezone.ts';
+} from '../lib/settingsSchema';
+import { formatTimestamp } from '../lib/timezone';
 import { PatternEditor } from './PatternEditor.tsx';
 
 function toInput(s: Settings): SettingsInput {

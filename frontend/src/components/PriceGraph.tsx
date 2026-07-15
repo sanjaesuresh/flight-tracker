@@ -3,8 +3,8 @@
 // theming. The chart is never the only way to read the data: a real data table is
 // always available as an alternative, and the SVG has a descriptive role/label.
 import { useMemo, useState } from 'react';
-import type { GraphSeries } from '../lib/types.ts';
-import { formatShortDate, formatFlightDate } from '../lib/timezone.ts';
+import type { GraphSeries } from '../lib/types';
+import { formatShortDate, formatFlightDate } from '../lib/timezone';
 
 // distinguishable on both light and dark surfaces; not relied on alone (chips +
 // table carry labels/values).

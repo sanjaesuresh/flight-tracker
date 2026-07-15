@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { OptionDetail } from '../OptionDetail.tsx';
 import { AuthProvider } from '../../auth/AuthProvider.tsx';
-import { api, ApiError } from '../../lib/api.ts';
-import type { OptionParams } from '../../lib/route.ts';
-import type { OptionHistoryPayload, PriceSnapshot } from '../../lib/types.ts';
+import { api, ApiError } from '../../lib/api';
+import type { OptionParams } from '../../lib/route';
+import type { OptionHistoryPayload, PriceSnapshot } from '../../lib/types';
 
 const params: OptionParams = {
   origin: 'LGA',

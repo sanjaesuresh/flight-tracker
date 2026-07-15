@@ -1,9 +1,9 @@
 // Add / edit / remove trip patterns: outbound weekday + time window, return weekday
 // + time window (all New York local). Each pattern is live-validated with the shared
 // contract; an invalid one (e.g. end before start) shows why and blocks Save upstream.
-import type { Pattern } from '../lib/types.ts';
-import { patternError } from '../lib/settingsSchema.ts';
-import { WEEKDAY_NAMES } from '../lib/timezone.ts';
+import type { Pattern } from '../lib/types';
+import { patternError } from '../lib/settingsSchema';
+import { WEEKDAY_NAMES } from '../lib/timezone';
 
 interface Props {
   patterns: Pattern[];

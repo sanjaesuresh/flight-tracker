@@ -1,8 +1,8 @@
 // First-class states in the board's own voice: LED status strips for stale/failing,
 // and standby / out-of-service screens for empty / error. No decorative icons — the
 // LED dot is the board's real status light.
-import { formatTimestamp, formatAgo } from '../../lib/timezone.ts';
-import { STALE_HOURS } from '../../lib/health.ts';
+import { formatTimestamp, formatAgo } from '../../lib/timezone';
+import { STALE_HOURS } from '../../lib/health';
 
 export function LoadingState() {
   return (

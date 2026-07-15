@@ -3,7 +3,7 @@
 // No DB, no user table — there is exactly one user. node:crypto is available on
 // both the Vercel Node runtime and the Vite dev server.
 import { createHmac, timingSafeEqual, createHash } from 'node:crypto';
-import type { ApiRequest, SetCookie } from './http.ts';
+import type { ApiRequest, SetCookie } from './http';
 
 const COOKIE_NAME = 'ft_session';
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { applyFilters, buildSeries, distinctAirlines, historyStats, rankOptions } from '../filter.ts';
-import type { FilterState, PriceSnapshot, Settings } from '../types.ts';
-import { emptyFilter } from '../filter.ts';
+import { applyFilters, buildSeries, distinctAirlines, historyStats, rankOptions } from '../filter';
+import type { FilterState, PriceSnapshot, Settings } from '../types';
+import { emptyFilter } from '../filter';
 
 function snap(p: Partial<PriceSnapshot>): PriceSnapshot {
   return {
