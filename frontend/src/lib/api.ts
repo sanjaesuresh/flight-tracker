@@ -7,8 +7,8 @@ import type {
   Settings,
   SettingsInput,
   SnapshotsPayload,
-} from './types';
-import type { OptionParams } from './route';
+} from './types.js';
+import type { OptionParams } from './route.js';
 
 export class ApiError extends Error {
   status: number;

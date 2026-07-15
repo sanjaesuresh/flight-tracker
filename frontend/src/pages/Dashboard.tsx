@@ -3,12 +3,12 @@
 // always agree), and routes to the loading / error / empty / stale / failing states.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider.tsx';
-import { api, ApiError } from '../lib/api';
-import type { FilterState, PollerHealth, Settings, SnapshotsPayload } from '../lib/types';
-import { applyFilters, buildSeries, distinctAirlines, emptyFilter, rankOptions } from '../lib/filter';
-import { deriveHealth } from '../lib/health';
-import { formatFlightDate } from '../lib/timezone';
-import { optionHashFor } from '../lib/route';
+import { api, ApiError } from '../lib/api.js';
+import type { FilterState, PollerHealth, Settings, SnapshotsPayload } from '../lib/types.js';
+import { applyFilters, buildSeries, distinctAirlines, emptyFilter, rankOptions } from '../lib/filter.js';
+import { deriveHealth } from '../lib/health.js';
+import { formatFlightDate } from '../lib/timezone.js';
+import { optionHashFor } from '../lib/route.js';
 import { CheapestList } from '../components/CheapestList.tsx';
 import { Filters } from '../components/Filters.tsx';
 import { PriceGraph } from '../components/PriceGraph.tsx';

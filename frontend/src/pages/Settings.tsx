@@ -2,8 +2,8 @@
 // first-class here too, so the settings screen is never a blank flash.
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider.tsx';
-import { api, ApiError } from '../lib/api';
-import type { Settings } from '../lib/types';
+import { api, ApiError } from '../lib/api.js';
+import type { Settings } from '../lib/types.js';
 import { SettingsForm } from '../components/SettingsForm.tsx';
 import { ErrorState, LoadingState } from '../components/state/States.tsx';
 

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { deriveHealth } from '../../lib/health';
-import type { PollerHealth } from '../../lib/types';
+import { deriveHealth } from '../../lib/health.js';
+import type { PollerHealth } from '../../lib/types.js';
 import {
   EmptyState,
   ErrorState,

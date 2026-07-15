@@ -9,7 +9,7 @@ import { BrandMark } from './components/BrandMark.tsx';
 import { Dashboard } from './pages/Dashboard.tsx';
 import { OptionDetail } from './pages/OptionDetail.tsx';
 import { SettingsPage } from './pages/Settings.tsx';
-import { parseOptionHash } from './lib/route';
+import { parseOptionHash } from './lib/route.js';
 
 type View = 'dashboard' | 'settings';
 

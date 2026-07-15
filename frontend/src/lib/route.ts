@@ -3,7 +3,7 @@
 // anchors (back button, middle-click, and copy-link all work) without adding a
 // router dependency. itinerary_key can contain `|`/`.`/`+`, so everything goes
 // through URLSearchParams encoding.
-import type { PriceSnapshot } from './types';
+import type { PriceSnapshot } from './types.js';
 
 // The identity of one flight option: the stable itinerary key plus the exact
 // airports and date pair (a key alone is ambiguous across multi-airport pairs).

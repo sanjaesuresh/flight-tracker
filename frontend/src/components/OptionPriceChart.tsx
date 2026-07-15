@@ -5,8 +5,8 @@
 // axis: the chart degrades to a "just started tracking" card. A data table
 // alternative is always available.
 import { useMemo } from 'react';
-import type { HistoryPoint } from '../lib/types';
-import { formatShortTimestamp, formatTimestamp } from '../lib/timezone';
+import type { HistoryPoint } from '../lib/types.js';
+import { formatShortTimestamp, formatTimestamp } from '../lib/timezone.js';
 
 const W = 760;
 const H = 280;

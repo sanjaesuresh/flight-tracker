@@ -7,7 +7,7 @@ import {
   formatTimestamp,
   hoursSince,
   nyTodayString,
-} from '../timezone';
+} from '../timezone.js';
 
 describe('timezone helpers (America/New_York)', () => {
   it('formats a date-only string without rolling to an adjacent day', () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { CheapestList } from '../CheapestList.tsx';
-import type { RankedOption } from '../../lib/types';
+import type { RankedOption } from '../../lib/types.js';
 
 const option = (p: Partial<RankedOption>): RankedOption => ({
   scraped_at: '2026-07-15T12:00:00Z',

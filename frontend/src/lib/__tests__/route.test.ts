@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { optionHash, optionHashFor, parseOptionHash } from '../route';
-import type { OptionParams } from '../route';
+import { optionHash, optionHashFor, parseOptionHash } from '../route.js';
+import type { OptionParams } from '../route.js';
 
 const params: OptionParams = {
   origin: 'JFK',

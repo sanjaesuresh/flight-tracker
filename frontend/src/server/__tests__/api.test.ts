@@ -1,10 +1,10 @@
 // End-to-end server test: real PGlite (real schema), real handlers, real auth.
 // Proves the whole data path the SPA depends on before any UI is built on it.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { createPgliteDb } from '../pglite';
-import { dispatch } from '../router';
-import type { ApiRequest, Db } from '../http';
-import type { PollerHealth, Settings, SnapshotsPayload } from '../../lib/types';
+import { createPgliteDb } from '../pglite.js';
+import { dispatch } from '../router.js';
+import type { ApiRequest, Db } from '../http.js';
+import type { PollerHealth, Settings, SnapshotsPayload } from '../../lib/types.js';
 
 const PW = 'correct-horse';
 

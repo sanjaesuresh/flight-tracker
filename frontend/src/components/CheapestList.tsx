@@ -1,9 +1,9 @@
 // The fare board: an aligned, tabular departures-board reading of the latest
 // snapshots. Preferred route carries a signal dot; the single lowest fare is lit.
 // Every nullable field (airline, stops, all leg times) degrades to "n/a".
-import type { RankedOption } from '../lib/types';
-import { formatFlightDate, formatTimeOfDay } from '../lib/timezone';
-import { optionHashFor } from '../lib/route';
+import type { RankedOption } from '../lib/types.js';
+import { formatFlightDate, formatTimeOfDay } from '../lib/timezone.js';
+import { optionHashFor } from '../lib/route.js';
 
 function stopsLabel(stops: number | null): { text: string; nonstop: boolean } {
   if (stops === null) return { text: 'stops n/a', nonstop: false };

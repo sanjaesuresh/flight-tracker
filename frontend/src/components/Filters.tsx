@@ -2,8 +2,8 @@
 // and per-leg time-of-day windows. Because return-leg times are frequently null and
 // the filter deliberately keeps unknown times, that behavior is stated inline so a
 // bounded return-time window never looks like it "lost" flights.
-import type { FilterState } from '../lib/types';
-import { emptyFilter } from '../lib/filter';
+import type { FilterState } from '../lib/types.js';
+import { emptyFilter } from '../lib/filter.js';
 
 interface Props {
   filter: FilterState;

@@ -4,9 +4,9 @@
 // never bundled into the client. Local dev uses the equivalent Vite middleware.
 import { neon } from '@neondatabase/serverless';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { dispatch } from '../src/server/router';
-import { parseCookies, serializeCookie } from '../src/server/http';
-import type { ApiRequest, Db } from '../src/server/http';
+import { dispatch } from '../src/server/router.js';
+import { parseCookies, serializeCookie } from '../src/server/http.js';
+import type { ApiRequest, Db } from '../src/server/http.js';
 
 function neonDb(): Db {
   const url = process.env.DATABASE_URL;

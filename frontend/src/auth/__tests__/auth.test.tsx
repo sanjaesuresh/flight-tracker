@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../../App.tsx';
 import { AuthProvider } from '../AuthProvider.tsx';
-import { api, ApiError } from '../../lib/api';
+import { api, ApiError } from '../../lib/api.js';
 
 const emptySettings = {
   origins: ['JFK', 'LGA'],

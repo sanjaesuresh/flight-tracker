@@ -3,8 +3,8 @@
 //   - stale: the freshest data we have is older than STALE_HOURS (old data).
 //   - failing: consecutive poll failures have crossed FAIL_THRESHOLD (actively
 //     broken) — a distinct, louder signal than merely stale.
-import type { PollerHealth } from './types';
-import { hoursSince } from './timezone';
+import type { PollerHealth } from './types.js';
+import { hoursSince } from './timezone.js';
 
 // N-hour staleness threshold. The poller runs ~hourly; 6h means several polls in a
 // row produced nothing. Documented in the README and kept near the poller's notion.

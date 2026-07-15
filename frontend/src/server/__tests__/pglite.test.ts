@@ -3,10 +3,10 @@
 // non-null link must be a real, dated Google Flights query URL. At least one
 // row must be null so the dashboard's "fare with no link" path stays exercised.
 import { describe, expect, it } from 'vitest';
-import { createPgliteDb } from '../pglite';
-import { dispatch } from '../router';
-import type { ApiRequest, Db } from '../http';
-import type { SnapshotsPayload } from '../../lib/types';
+import { createPgliteDb } from '../pglite.js';
+import { dispatch } from '../router.js';
+import type { ApiRequest, Db } from '../http.js';
+import type { SnapshotsPayload } from '../../lib/types.js';
 
 const PW = 'correct-horse';
 
