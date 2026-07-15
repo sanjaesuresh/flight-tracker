@@ -32,5 +32,8 @@ dist/
 # spike output (generated artifact, not source)
 spike_fixture.json
 
+# editor local-history (VS Code Local History etc.) — may contain .env copies with real secrets
+.history/
+
 # OS
 .DS_Store
