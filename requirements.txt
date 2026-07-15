@@ -1,3 +1,8 @@
+flights==0.9.0
+# fast-flights is the documented fallback (RUNBOOK.md) if fli's
+# reverse-engineered protobuf API breaks -- kept installed and importable via
+# poller/data_source/google_flights.py, but FliSource is the default source
+# as of Phase 2 (see docs/planning/rework-plan.md).
 fast-flights==3.0.2
 # fast-flights 3.0.2's own PyPI metadata does not declare typing_extensions as a
 # dependency, but fast_flights/querying.py imports it directly (`from typing_extensions

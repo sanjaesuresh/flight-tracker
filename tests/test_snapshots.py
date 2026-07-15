@@ -7,12 +7,20 @@ commit() records a commit marker in the same list -- so tests can assert the
 exact interleaving of inserts vs commits vs the failure, which is the whole
 point of the partial-success contract.
 """
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 
 from poller.models import Offer, SearchRequest
-from poller.snapshots import WriteResult, history_for_pair, latest_snapshots, write_snapshots
+from poller.snapshots import (
+    KEEP_N_ITINERARIES,
+    RETENTION_DAYS,
+    WriteResult,
+    history_for_pair,
+    latest_snapshots,
+    prune_snapshots,
+    write_snapshots,
+)
 
 
 class FakeCursor:
@@ -95,7 +103,7 @@ class _CountingCursor:
         return None
 
 
-def make_offer(price_usd, airline, stops=0):
+def make_offer(price_usd, airline, stops=0, itinerary_key=None, origin=None, destination=None):
     return Offer(
         price_usd=price_usd,
         airline=airline,
@@ -105,6 +113,9 @@ def make_offer(price_usd, airline, stops=0):
         return_dep=None,
         return_arr=None,
         booking_url="https://example.com/book",
+        origin=origin,
+        destination=destination,
+        itinerary_key=itinerary_key,
     )
 
 
@@ -117,20 +128,104 @@ def make_request(origin="JFK", destination="YYZ", outbound_date=None, return_dat
     )
 
 
-def test_two_requests_within_30_dollar_airline_rule_inserts_extra_rows():
-    """best=$200 (airline A); B=$220 included (<=230); C=$260 excluded.
+def test_keep_n_distinct_itineraries_from_more_than_n_candidates():
+    """15 distinct itinerary_keys -> only the 10 cheapest are kept, and the
+    overall cheapest is always among them."""
+    offers = [
+        make_offer(100 + i, f"Airline {i}", itinerary_key=f"KEY{i}")
+        for i in range(15)
+    ]
 
-    Second request just has a single cheap offer -- one row.
-    """
+    conn = FakeConn()
+    scraped_at = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+    req = make_request()
+
+    result = write_snapshots(conn, scraped_at, [(req, offers)])
+
+    assert result.written == KEEP_N_ITINERARIES == 10
+    inserted_prices = sorted(
+        event[2][5] for event in conn.events if event[0] == "execute"
+    )
+    # cheapest 10 of [100..114] -> 100..109; the overall cheapest (100) is
+    # among them.
+    assert inserted_prices == list(range(100, 110))
+    assert 100 in inserted_prices
+
+
+def test_duplicate_itinerary_keys_collapse_to_their_cheapest():
+    offers = [
+        make_offer(300, "Airline A", itinerary_key="SAME"),
+        make_offer(250, "Airline A", itinerary_key="SAME"),  # same key, cheaper
+        make_offer(280, "Airline B", itinerary_key="OTHER"),
+    ]
+
+    conn = FakeConn()
+    scraped_at = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+    req = make_request()
+
+    result = write_snapshots(conn, scraped_at, [(req, offers)])
+
+    assert result.written == 2
+    inserted_prices = sorted(
+        event[2][5] for event in conn.events if event[0] == "execute"
+    )
+    assert inserted_prices == [250, 280]
+
+
+def test_null_key_offers_each_treated_as_distinct_and_cheapest_always_kept():
+    """Null-key offers (fast-flights fallback) fall back to per-airline dedup
+    -- distinct airlines each get a row, and the overall cheapest (even with
+    a null key) is never dropped."""
+    offers = [
+        make_offer(500, "Airline A", itinerary_key=None),
+        make_offer(90, "Airline B", itinerary_key=None),  # overall cheapest, null key
+        make_offer(120, "Airline C", itinerary_key="KEYED"),
+    ]
+
+    conn = FakeConn()
+    scraped_at = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+    req = make_request()
+
+    result = write_snapshots(conn, scraped_at, [(req, offers)])
+
+    assert result.written == 3
+    inserted_prices = sorted(
+        event[2][5] for event in conn.events if event[0] == "execute"
+    )
+    assert inserted_prices == [90, 120, 500]
+    assert 90 in inserted_prices  # overall cheapest never dropped
+
+
+def test_null_key_offers_same_airline_collapse_to_cheapest_per_airline():
+    offers = [
+        make_offer(200, "Airline A", itinerary_key=None),
+        make_offer(180, "Airline A", itinerary_key=None),  # same airline, cheaper
+    ]
+
+    conn = FakeConn()
+    scraped_at = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+    req = make_request()
+
+    result = write_snapshots(conn, scraped_at, [(req, offers)])
+
+    assert result.written == 1
+    inserted_prices = [event[2][5] for event in conn.events if event[0] == "execute"]
+    assert inserted_prices == [180]
+
+
+def test_two_requests_each_within_keep_n_inserts_all_rows():
+    """Two requests, each with a small distinct-key set well under N -- every
+    offer becomes a row (regression check for the old within-$30 cutoff,
+    which no longer applies now that identity is itinerary_key-based)."""
     req1 = make_request(outbound_date=date(2026, 8, 6), return_date=date(2026, 8, 9))
     req2 = make_request(outbound_date=date(2026, 8, 13), return_date=date(2026, 8, 16))
 
     offers1 = [
-        make_offer(200, "Airline A"),
-        make_offer(220, "Airline B"),
-        make_offer(260, "Airline C"),
+        make_offer(200, "Airline A", itinerary_key="A1"),
+        make_offer(220, "Airline B", itinerary_key="B1"),
+        make_offer(260, "Airline C", itinerary_key="C1"),
     ]
-    offers2 = [make_offer(150, "Airline D")]
+    offers2 = [make_offer(150, "Airline D", itinerary_key="D1")]
 
     conn = FakeConn()
     scraped_at = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
@@ -139,16 +234,14 @@ def test_two_requests_within_30_dollar_airline_rule_inserts_extra_rows():
 
     assert isinstance(result, WriteResult)
     assert result.failed_requests == 0
-    # req1: A ($200) + B ($220) inserted, C ($260) excluded -> 2 rows.
-    # req2: 1 row.
-    assert result.written == 3
+    assert result.written == 4
 
     inserted_prices = [
         event[2][5]  # price_usd position in the insert params, see snapshots.py
         for event in conn.events
         if event[0] == "execute"
     ]
-    assert sorted(inserted_prices) == [150, 200, 220]
+    assert sorted(inserted_prices) == [150, 200, 220, 260]
 
     # one commit per request (2 requests -> 2 commits), issued after that
     # request's inserts.
@@ -211,6 +304,30 @@ def test_partial_success_middle_request_fails_first_and_third_still_written():
     assert commit_count == 2  # req1 and req3 only; req2 never committed
 
 
+def test_offer_actual_airports_used_when_set_request_pair_only_as_fallback():
+    """Phase 3: each row's origin/destination column is the OFFER's actual
+    airports when set (fli/fallback-tagged offers), falling back to the
+    request's representative pair only when the offer left them None."""
+    req = make_request(origin="LGA", destination="YYZ")
+    offers = [
+        make_offer(200, "AC", itinerary_key="K1", origin="LGA", destination="YTZ"),
+        make_offer(180, "PD", itinerary_key="K2", origin=None, destination=None),
+    ]
+
+    conn = FakeConn()
+    scraped_at = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+
+    write_snapshots(conn, scraped_at, [(req, offers)])
+
+    rows_by_price = {event[2][5]: event[2] for event in conn.events if event[0] == "execute"}
+    # offer with actual airports set -> row carries THOSE, not the request's.
+    assert rows_by_price[200][1] == "LGA"
+    assert rows_by_price[200][2] == "YTZ"
+    # offer with no actual airports set -> falls back to the request's pair.
+    assert rows_by_price[180][1] == "LGA"
+    assert rows_by_price[180][2] == "YYZ"
+
+
 def test_history_for_pair_issues_expected_sql_and_params():
     events = []
     conn = _EventsOnlyConn(events, fetch_result=[
@@ -249,6 +366,50 @@ def test_latest_snapshots_issues_distinct_on_query():
     sql, params = events[0]
     assert "DISTINCT ON" in sql
     assert "price_snapshots" in sql
+
+
+def test_prune_snapshots_deletes_past_outbound_and_old_scraped_rows():
+    """prune_snapshots issues two DELETEs -- one keyed on today's NY date (past
+    outbound_date), one keyed on the 90-day scraped_at cutoff -- then commits.
+    Verified via the executed SQL + params against a fake conn, matching the
+    existing snapshots-test style (no live DB, no row-level simulation)."""
+    conn = FakeConn()
+    now = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+
+    prune_snapshots(conn, now)
+
+    execute_events = [e for e in conn.events if e[0] == "execute"]
+    assert len(execute_events) == 2
+
+    outbound_sql, outbound_params = execute_events[0][1], execute_events[0][2]
+    assert "outbound_date <" in outbound_sql
+    # America/New_York date for the UTC instant above is still 2026-07-14.
+    assert outbound_params == (date(2026, 7, 14),)
+
+    scraped_sql, scraped_params = execute_events[1][1], execute_events[1][2]
+    assert "scraped_at <" in scraped_sql
+    assert scraped_params == (now - timedelta(days=RETENTION_DAYS),)
+
+    assert conn.events[-1] == ("commit",)
+
+
+def test_prune_snapshots_keeps_a_current_row_conceptually_via_cutoff_values():
+    """A row dated today (not strictly before the cutoff date) and scraped
+    now (not older than 90 days) would not match either DELETE's WHERE
+    clause -- asserted here via the cutoff values themselves, since the fake
+    conn doesn't simulate row-level filtering."""
+    conn = FakeConn()
+    now = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+
+    prune_snapshots(conn, now)
+
+    execute_events = [e for e in conn.events if e[0] == "execute"]
+    _, outbound_params = execute_events[0][1], execute_events[0][2]
+    _, scraped_params = execute_events[1][1], execute_events[1][2]
+
+    today = date(2026, 7, 14)
+    assert today >= outbound_params[0]  # today's row is NOT strictly before cutoff
+    assert now >= scraped_params[0]  # a row scraped now is NOT older than cutoff
 
 
 class _EventsOnlyConn:

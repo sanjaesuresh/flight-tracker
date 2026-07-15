@@ -46,6 +46,26 @@ create table if not exists price_snapshots (
 create index if not exists price_snapshots_route_date_scraped_idx
     on price_snapshots (origin, destination, outbound_date, return_date, scraped_at);
 
+-- Phase 4: per-itinerary identity + per-direction detail, additive so old
+-- rows keep working with nulls (fast-flights rows never populate these; the
+-- fli normalizer does). itinerary_key is deterministic from both directions'
+-- ordered legs (carrier + flight number + leg departure date) and MUST NOT
+-- embed price -- see poller/snapshots.py's build_itinerary_key for the exact
+-- format. Rows without enough leg data (fast-flights fallback) get a null
+-- key and are simply excluded from per-option charts.
+alter table price_snapshots add column if not exists itinerary_key text;
+alter table price_snapshots add column if not exists outbound_airline text;
+alter table price_snapshots add column if not exists return_airline text;
+alter table price_snapshots add column if not exists outbound_flight_numbers text;
+alter table price_snapshots add column if not exists return_flight_numbers text;
+alter table price_snapshots add column if not exists outbound_stops int;
+alter table price_snapshots add column if not exists return_stops int;
+
+-- Supports the per-option hourly history lookup (Phase 5): same route+dates,
+-- filtered to one itinerary_key, most-recent first.
+create index if not exists price_snapshots_itinerary_scraped_idx
+    on price_snapshots (origin, destination, outbound_date, return_date, itinerary_key, scraped_at);
+
 -- One row per deal identity (upsert target) so re-alert logic can read the latest
 -- alert for a given identity instead of scanning history. stops_bucket collapses
 -- exact stop counts to 'nonstop' (0 stops) / 'connecting' (otherwise).

@@ -76,14 +76,18 @@ def test_expand_patterns_thursdays_paired_with_sunday_three_days_later():
 
     results = expand_patterns(settings, today)
 
-    for origin, destination in od_pairs():
-        pairs = [
-            (r.outbound_date, r.return_date)
-            for r, _p in results
-            if r.origin == origin and r.destination == destination
-        ]
-        expected_pairs = [(d, d + timedelta(days=3)) for d in expected_thursdays]
-        assert pairs == expected_pairs
+    # Phase 3: one matrix candidate per date-pair (not one per O-D pair) --
+    # every result carries the full origins/destinations lists rather than
+    # being filtered by a single O-D pair.
+    pairs = [(r.outbound_date, r.return_date) for r, _p in results]
+    expected_pairs = [(d, d + timedelta(days=3)) for d in expected_thursdays]
+    assert pairs == expected_pairs
+
+    for r, _p in results:
+        assert r.origins == ORIGINS
+        assert r.destinations == DESTINATIONS
+        assert r.origin == settings.preferred_origin
+        assert r.destination == settings.preferred_destination
 
     # the excluded Thursday (2026-04-30) must not appear at all
     all_outbound_dates = {r.outbound_date for r, _p in results}
@@ -144,15 +148,13 @@ def test_expand_patterns_month_boundary_and_dst_fallback_window():
 def test_expand_patterns_two_patterns_union_no_duplicate_rows():
     # THU_SUN_PATTERN and FRI_SUN_PATTERN never collide (different outbound
     # weekdays), so the union must simply be the concatenation of both sets
-    # with no (O-D, outbound, return) row repeated.
+    # with no (outbound, return) date-pair repeated.
     today = date(2026, 3, 2)
     settings = make_settings([THU_SUN_PATTERN, FRI_SUN_PATTERN], window_days=60)
 
     results = expand_patterns(settings, today)
 
-    keys = [
-        (r.origin, r.destination, r.outbound_date, r.return_date) for r, _p in results
-    ]
+    keys = [(r.outbound_date, r.return_date) for r, _p in results]
     assert len(keys) == len(set(keys))
 
     # sanity: both weekdays actually show up in the results
@@ -161,9 +163,10 @@ def test_expand_patterns_two_patterns_union_no_duplicate_rows():
 
 
 def test_expand_patterns_dedupes_identical_pairs_from_different_patterns():
-    # two patterns that happen to generate the same (O-D, outbound, return)
-    # row must collapse to a single entry, keeping the first pattern's
-    # attribution.
+    # two patterns that happen to generate the same (outbound, return)
+    # date-pair must collapse to a single entry, keeping the first pattern's
+    # attribution -- Phase 3: dedup key is the date-pair alone, airports are
+    # no longer part of candidate identity.
     today = date(2026, 3, 2)
     duplicate_pattern = Pattern(
         outbound_weekday=3,
@@ -177,20 +180,35 @@ def test_expand_patterns_dedupes_identical_pairs_from_different_patterns():
 
     results = expand_patterns(settings, today)
 
-    keys = [
-        (r.origin, r.destination, r.outbound_date, r.return_date) for r, _p in results
-    ]
+    keys = [(r.outbound_date, r.return_date) for r, _p in results]
     assert len(keys) == len(set(keys))
 
     # the first pattern (THU_SUN_PATTERN) must be the one attributed to the
     # dedupe-surviving row
     for r, p in results:
-        if (
-            r.origin == "LGA"
-            and r.destination == "YYZ"
-            and r.outbound_date == date(2026, 3, 5)
-        ):
+        if r.outbound_date == date(2026, 3, 5):
             assert p is THU_SUN_PATTERN
+
+
+def test_expand_patterns_one_date_pair_yields_one_matrix_candidate_not_four():
+    # Phase 3: a single date-pair must expand to exactly ONE candidate
+    # carrying both airport lists -- not one per O-D pair (the old 2x2 = 4
+    # rows per date-pair behavior).
+    today = date(2026, 3, 5)  # a Thursday
+    settings = make_settings([THU_SUN_PATTERN], window_days=3)
+
+    results = expand_patterns(settings, today)
+
+    assert len(results) == 1
+    request, pattern = results[0]
+    assert request.outbound_date == today
+    assert request.return_date == date(2026, 3, 8)
+    assert request.origins == ORIGINS
+    assert request.destinations == DESTINATIONS
+    # representative pair used for logging/the fast-flights fallback
+    assert request.origin == settings.preferred_origin
+    assert request.destination == settings.preferred_destination
+    assert pattern is THU_SUN_PATTERN
 
 
 def test_expand_patterns_same_weekday_return_is_seven_days_later_never_same_day():

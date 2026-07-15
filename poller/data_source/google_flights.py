@@ -89,8 +89,37 @@ class GoogleFlightsSource(DataSource):
         self.rng = rng if rng is not None else random.Random()
 
     def search(self, request: SearchRequest) -> list[Offer]:
-        raw, booking_url = self.fetch_fn(request)
-        return normalize_offers(raw, request, booking_url=booking_url)
+        """Fetches offers for one request.
+
+        Phase 3: fast-flights has no multi-airport query, so a matrix request
+        (origins/destinations lists set) is served as one single-pair fetch
+        PER (origin, destination) pair, concatenated -- no cross-airport
+        mixing, degraded relative to fli's one-query matrix but still full
+        coverage of every pair (see rework-plan.md Phase 3's fallback note).
+        A legacy request (lists None) behaves exactly as before: one fetch
+        for request.origin/request.destination.
+        """
+        origins = request.origins if request.origins is not None else [request.origin]
+        destinations = request.destinations if request.destinations is not None else [request.destination]
+
+        offers: list[Offer] = []
+        for origin in origins:
+            for destination in destinations:
+                # a concrete single-pair request for this exact pair -- reuses
+                # the existing fetch_fn/normalize_offers path unchanged, then
+                # tags each resulting offer with the pair actually queried.
+                pair_request = SearchRequest(
+                    origin=origin,
+                    destination=destination,
+                    outbound_date=request.outbound_date,
+                    return_date=request.return_date,
+                )
+                raw, booking_url = self.fetch_fn(pair_request)
+                for offer in normalize_offers(raw, pair_request, booking_url=booking_url):
+                    offer.origin = origin
+                    offer.destination = destination
+                    offers.append(offer)
+        return offers
 
     def confirm_candidates(
         self, candidates: list[SearchRequest], cursor: int

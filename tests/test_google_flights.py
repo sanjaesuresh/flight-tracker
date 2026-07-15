@@ -275,3 +275,49 @@ def test_search_calls_fetch_fn_and_normalizes_with_booking_url():
     assert fetch.calls == [request]
     assert len(offers) >= 1
     assert offers[0].booking_url == "https://www.google.com/travel/flights/search?tfs=fake"
+
+
+def test_search_with_no_lists_is_legacy_single_pair_and_leaves_offer_airports_matching_request():
+    # a request with origins/destinations left None (legacy single-pair
+    # shape) must behave EXACTLY as before: one fetch, offers tagged with
+    # exactly that one pair.
+    request = make_request(origin="JFK", destination="YYZ")
+    fetch = FakeFetch()
+    source = GoogleFlightsSource(fetch_fn=fetch, sleep_fn=FakeSleep(), rng=FixedRng())
+
+    offers = source.search(request)
+
+    assert len(fetch.calls) == 1
+    assert len(offers) >= 1
+    for offer in offers:
+        assert offer.origin == "JFK"
+        assert offer.destination == "YYZ"
+
+
+def test_search_with_matrix_lists_loops_every_pair_and_tags_each_offers_airports():
+    # Phase 3 fallback: fast-flights has no multi-airport query, so a matrix
+    # request (origins/destinations set) must degrade to one fetch PER
+    # (origin, destination) pair, concatenated -- every resulting offer
+    # tagged with the pair that produced it (no cross-airport mixing).
+    request = SearchRequest(
+        origin="JFK",
+        destination="YYZ",
+        outbound_date=date(2026, 8, 4),
+        return_date=date(2026, 8, 7),
+        origins=["JFK", "LGA"],
+        destinations=["YYZ", "YTZ"],
+    )
+    fetch = FakeFetch()
+    source = GoogleFlightsSource(fetch_fn=fetch, sleep_fn=FakeSleep(), rng=FixedRng())
+
+    offers = source.search(request)
+
+    # 2 origins x 2 destinations = 4 single-pair fetches.
+    assert len(fetch.calls) == 4
+    called_pairs = sorted((r.origin, r.destination) for r in fetch.calls)
+    assert called_pairs == [
+        ("JFK", "YTZ"), ("JFK", "YYZ"), ("LGA", "YTZ"), ("LGA", "YYZ"),
+    ]
+    assert len(offers) >= 4  # the fixture yields >=1 offer per pair
+    seen_pairs = {(o.origin, o.destination) for o in offers}
+    assert seen_pairs == {("JFK", "YTZ"), ("JFK", "YYZ"), ("LGA", "YTZ"), ("LGA", "YYZ")}

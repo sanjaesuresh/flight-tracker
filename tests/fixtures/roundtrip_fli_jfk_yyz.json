@@ -1,0 +1,174 @@
+{
+  "outbound_date": "2026-08-15",
+  "return_date": "2026-08-17",
+  "pairs": [
+    [
+      {
+        "price": 408.0,
+        "currency": "USD",
+        "stops": 0,
+        "booking_token": "[\"CAISA1VTRBoECOC+AiJyCl0KWwoDSkZLEhkyMDI2LTA4LTE1VDA5OjI5OjAwLTA0OjAwGgNZWVoiGTIwMjYtMDgtMTVUMTE6MjU6MDAtMDQ6MDAqAkRMMgQ1MDA3OgJETEIENTAwN0gBUgNDUjkSBAgDEAEYASgAMgcKBURlbHRh\"]",
+        "legs": [
+          {
+            "airline": "DL",
+            "flight_number": "5007",
+            "departure_airport": "JFK",
+            "arrival_airport": "YYZ",
+            "departure_datetime": "2026-08-15T09:29:00",
+            "arrival_datetime": "2026-08-15T11:25:00"
+          }
+        ]
+      },
+      {
+        "price": 435.0,
+        "currency": "USD",
+        "stops": 0,
+        "booking_token": "[\"CAISA1VTRBoECKLTAiJyCl0KWwoDWVlaEhkyMDI2LTA4LTE3VDA2OjAwOjAwLTA0OjAwGgNKRksiGTIwMjYtMDgtMTdUMDc6NTM6MDAtMDQ6MDAqAkRMMgQ1MDY2OgJETEIENTA2NkgBUgNDUjkSBAgDEAEYASgAMgcKBURlbHRh\",[\"ClsKA0pGSxIZMjAyNi0wOC0xNVQwOToyOTowMC0wNDowMBoDWVlaIhkyMDI2LTA4LTE1VDExOjI1OjAwLTA0OjAwKgJETDIENTAwNzoCRExCBDUwMDdIAVIDQ1I5\"]]",
+        "legs": [
+          {
+            "airline": "DL",
+            "flight_number": "5066",
+            "departure_airport": "YYZ",
+            "arrival_airport": "JFK",
+            "departure_datetime": "2026-08-17T06:00:00",
+            "arrival_datetime": "2026-08-17T07:53:00"
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "price": 408.0,
+        "currency": "USD",
+        "stops": 0,
+        "booking_token": "[\"CAISA1VTRBoECOC+AiJyCl0KWwoDSkZLEhkyMDI2LTA4LTE1VDA5OjI5OjAwLTA0OjAwGgNZWVoiGTIwMjYtMDgtMTVUMTE6MjU6MDAtMDQ6MDAqAkRMMgQ1MDA3OgJETEIENTAwN0gBUgNDUjkSBAgDEAEYASgAMgcKBURlbHRh\"]",
+        "legs": [
+          {
+            "airline": "DL",
+            "flight_number": "5007",
+            "departure_airport": "JFK",
+            "arrival_airport": "YYZ",
+            "departure_datetime": "2026-08-15T09:29:00",
+            "arrival_datetime": "2026-08-15T11:25:00"
+          }
+        ]
+      },
+      {
+        "price": 408.0,
+        "currency": "USD",
+        "stops": 2,
+        "booking_token": "[\"CAISA1VTRBoECOC+AiKwAgqXAgpbCgNZWVoSGTIwMjYtMDgtMTdUMTg6MDg6MDAtMDQ6MDAaA1BITCIZMjAyNi0wOC0xN1QxOTo1NTowMC0wNDowMCoCQUEyBDQ2MzI6AkFBQgQ0NjMySAFSA0U3NQpbCgNQSEwSGTIwMjYtMDgtMTdUMjE6MTU6MDAtMDQ6MDAaA0JPUyIZMjAyNi0wOC0xN1QyMjo1MDowMC0wNDowMCoCQUEyBDI0MDQ6AkFBQgQyNDA0SAFSAzMyMQpbCgNCT1MSGTIwMjYtMDgtMThUMDY6MDA6MDAtMDQ6MDAaA0pGSyIZMjAyNi0wOC0xOFQwNzoyNjowMC0wNDowMCoCQUEyBDQzNTc6AkFBQgQ0MzU3SAFSA0U3NRIECAMQARgBKAAyCgoIQW1lcmljYW4\\u003d\",[\"ClsKA0pGSxIZMjAyNi0wOC0xNVQwOToyOTowMC0wNDowMBoDWVlaIhkyMDI2LTA4LTE1VDExOjI1OjAwLTA0OjAwKgJETDIENTAwNzoCRExCBDUwMDdIAVIDQ1I5\"]]",
+        "legs": [
+          {
+            "airline": "AA",
+            "flight_number": "4632",
+            "departure_airport": "YYZ",
+            "arrival_airport": "PHL",
+            "departure_datetime": "2026-08-17T18:08:00",
+            "arrival_datetime": "2026-08-17T19:55:00"
+          },
+          {
+            "airline": "AA",
+            "flight_number": "2404",
+            "departure_airport": "PHL",
+            "arrival_airport": "BOS",
+            "departure_datetime": "2026-08-17T21:15:00",
+            "arrival_datetime": "2026-08-17T22:50:00"
+          },
+          {
+            "airline": "AA",
+            "flight_number": "4357",
+            "departure_airport": "BOS",
+            "arrival_airport": "JFK",
+            "departure_datetime": "2026-08-18T06:00:00",
+            "arrival_datetime": "2026-08-18T07:26:00"
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "price": 408.0,
+        "currency": "USD",
+        "stops": 0,
+        "booking_token": "[\"CAISA1VTRBoECOC+AiJyCl0KWwoDSkZLEhkyMDI2LTA4LTE1VDA5OjI5OjAwLTA0OjAwGgNZWVoiGTIwMjYtMDgtMTVUMTE6MjU6MDAtMDQ6MDAqAkRMMgQ1MDA3OgJETEIENTAwN0gBUgNDUjkSBAgDEAEYASgAMgcKBURlbHRh\"]",
+        "legs": [
+          {
+            "airline": "DL",
+            "flight_number": "5007",
+            "departure_airport": "JFK",
+            "arrival_airport": "YYZ",
+            "departure_datetime": "2026-08-15T09:29:00",
+            "arrival_datetime": "2026-08-15T11:25:00"
+          }
+        ]
+      },
+      {
+        "price": null,
+        "currency": "USD",
+        "stops": 0,
+        "booking_token": "[\"CAISA1VTRBoECKLTAiJyCl0KWwoDWVlaEhkyMDI2LTA4LTE3VDA2OjAwOjAwLTA0OjAwGgNKRksiGTIwMjYtMDgtMTdUMDc6NTM6MDAtMDQ6MDAqAkRMMgQ1MDY2OgJETEIENTA2NkgBUgNDUjkSBAgDEAEYASgAMgcKBURlbHRh\",[\"ClsKA0pGSxIZMjAyNi0wOC0xNVQwOToyOTowMC0wNDowMBoDWVlaIhkyMDI2LTA4LTE1VDExOjI1OjAwLTA0OjAwKgJETDIENTAwNzoCRExCBDUwMDdIAVIDQ1I5\"]]",
+        "legs": [
+          {
+            "airline": "DL",
+            "flight_number": "5066",
+            "departure_airport": "YYZ",
+            "arrival_airport": "JFK",
+            "departure_datetime": "2026-08-17T06:00:00",
+            "arrival_datetime": "2026-08-17T07:53:00"
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "price": 408.0,
+        "currency": "USD",
+        "stops": 0,
+        "booking_token": "[\"CAISA1VTRBoECOC+AiJyCl0KWwoDSkZLEhkyMDI2LTA4LTE1VDA5OjI5OjAwLTA0OjAwGgNZWVoiGTIwMjYtMDgtMTVUMTE6MjU6MDAtMDQ6MDAqAkRMMgQ1MDA3OgJETEIENTAwN0gBUgNDUjkSBAgDEAEYASgAMgcKBURlbHRh\"]",
+        "legs": [
+          {
+            "airline": "DL",
+            "flight_number": "5007",
+            "departure_airport": "JFK",
+            "arrival_airport": "YYZ",
+            "departure_datetime": "2026-08-15T09:29:00",
+            "arrival_datetime": "2026-08-15T11:25:00"
+          }
+        ]
+      },
+      {
+        "price": 512.0,
+        "currency": "USD",
+        "stops": 2,
+        "booking_token": "multi_carrier_return_token",
+        "legs": [
+          {
+            "airline": "B6",
+            "flight_number": "1001",
+            "departure_airport": "YYZ",
+            "arrival_airport": "BOS",
+            "departure_datetime": "2026-08-17T08:00:00",
+            "arrival_datetime": "2026-08-17T09:30:00"
+          },
+          {
+            "airline": "UA",
+            "flight_number": "2002",
+            "departure_airport": "BOS",
+            "arrival_airport": "ORD",
+            "departure_datetime": "2026-08-17T11:00:00",
+            "arrival_datetime": "2026-08-17T12:45:00"
+          },
+          {
+            "airline": "AA",
+            "flight_number": "3003",
+            "departure_airport": "ORD",
+            "arrival_airport": "JFK",
+            "departure_datetime": "2026-08-17T14:00:00",
+            "arrival_datetime": "2026-08-17T17:26:00"
+          }
+        ]
+      }
+    ]
+  ]
+}

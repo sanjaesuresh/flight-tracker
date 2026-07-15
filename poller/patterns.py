@@ -18,12 +18,17 @@ def expand_patterns(
     pattern, every date in the window matching outbound_weekday becomes a
     candidate outbound; the paired return is the next occurrence of
     return_weekday (at least 1 day later, never same-day) that still falls
-    inside the window. Emits one row per (pattern, O-D pair); rows sharing
-    the same (origin, destination, outbound_date, return_date) across
-    different patterns are deduped, keeping the first pattern seen.
+    inside the window. Emits ONE row per (pattern, date-pair) -- Phase 3
+    collapses the old per-O-D-pair expansion into a single matrix candidate
+    per date-pair, carrying settings.origins/settings.destinations as the
+    full airport lists (one fli query covers the whole matrix; see
+    docs/planning/rework-plan.md's Verdict C). Rows sharing the same
+    (outbound_date, return_date) across different patterns are deduped,
+    keeping the first pattern seen -- airports are no longer part of the
+    candidate identity since every candidate now covers the same matrix.
     """
     window_end = today + timedelta(days=settings.window_days)
-    seen: dict[tuple[str, str, date, date], None] = {}
+    seen: dict[tuple[date, date], None] = {}
     results: list[tuple[SearchRequest, Pattern]] = []
 
     for pattern in settings.patterns:
@@ -38,23 +43,26 @@ def expand_patterns(
             if d.weekday() == pattern.outbound_weekday:
                 return_date = d + timedelta(days=gap)
                 if return_date <= window_end:
-                    for origin in settings.origins:
-                        for destination in settings.destinations:
-                            key = (origin, destination, d, return_date)
-                            if key in seen:
-                                continue
-                            seen[key] = None
-                            results.append(
-                                (
-                                    SearchRequest(
-                                        origin=origin,
-                                        destination=destination,
-                                        outbound_date=d,
-                                        return_date=return_date,
-                                    ),
-                                    pattern,
-                                )
+                    key = (d, return_date)
+                    if key not in seen:
+                        seen[key] = None
+                        results.append(
+                            (
+                                SearchRequest(
+                                    # representative pair for logging/the
+                                    # fast-flights fallback; the matrix lists
+                                    # below are what a matrix-aware source
+                                    # actually queries.
+                                    origin=settings.preferred_origin,
+                                    destination=settings.preferred_destination,
+                                    outbound_date=d,
+                                    return_date=return_date,
+                                    origins=settings.origins,
+                                    destinations=settings.destinations,
+                                ),
+                                pattern,
                             )
+                        )
             d += timedelta(days=1)
 
     return results

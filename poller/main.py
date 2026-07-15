@@ -9,7 +9,12 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from poller.config import Config, load_config
-from poller.data_source.google_flights import GoogleFlightsSource
+from poller.data_source.fli_source import FliSource
+
+# GoogleFlightsSource (fast-flights) stays importable as the documented
+# fallback -- see RUNBOOK.md's degrade path if fli's reverse-engineered API
+# breaks. Not wired up as the default below (Phase 2: fli is the default).
+from poller.data_source.google_flights import GoogleFlightsSource  # noqa: F401
 from poller.db import (
     fetch_settings,
     get_connection,
@@ -20,10 +25,10 @@ from poller.db import (
     set_poller_state,
 )
 from poller.emailer import send_alerts, send_smtp
-from poller.models import Settings, Trip
+from poller.models import SearchRequest, Settings, Trip
 from poller.patterns import expand_patterns, trip_matches_windows
 from poller.rules import best_per_identity, deal_identity, evaluate
-from poller.snapshots import history_for_pair, write_snapshots
+from poller.snapshots import history_for_pair, prune_snapshots, write_snapshots
 
 NY_TZ = ZoneInfo("America/New_York")
 PAIR_HISTORY_DAYS = 14
@@ -32,16 +37,17 @@ PATTERN_HISTORY_DAYS = 14
 logger = logging.getLogger(__name__)
 
 
-def _request_key(request):
-    """(origin, destination, outbound_date, return_date) -- SearchRequest is
-    an unhashable dataclass, so callers key lookups on this tuple instead.
+def _date_pair_key(request):
+    """(outbound_date, return_date) -- Phase 3: expand_patterns now emits one
+    matrix candidate per date-pair (not per O-D pair), so pattern lookup must
+    key on dates alone; airports no longer identify a candidate.
     """
-    return (request.origin, request.destination, request.outbound_date, request.return_date)
+    return (request.outbound_date, request.return_date)
 
 
-def _od_code(request) -> str:
-    """"JFK->YYZ"-style code for logging -- never the full request/offer."""
-    return f"{request.origin}->{request.destination}"
+def _od_code(origin: str, destination: str) -> str:
+    """"JFK->YYZ"-style code for logging -- never the full request/offer/dates."""
+    return f"{origin}->{destination}"
 
 
 def log_settings_warnings(warnings: list[str]) -> None:
@@ -77,7 +83,7 @@ def run_poll(conn, source, settings: Settings, config: Config, now: datetime, tr
     # request's originating pattern (needed later to check offer time windows).
     candidates = expand_patterns(settings, today)
     request_list = [request for request, _pattern in candidates]
-    pattern_by_key = {_request_key(request): pattern for request, pattern in candidates}
+    pattern_by_key = {_date_pair_key(request): pattern for request, pattern in candidates}
 
     # 2. confirm a budget-limited slice of the candidates via the rotating cursor.
     poller_state = get_poller_state(conn)
@@ -88,6 +94,14 @@ def run_poll(conn, source, settings: Settings, config: Config, now: datetime, tr
     # everything scraped this cycle regardless of whether it matches a pattern window.
     write_result = write_snapshots(conn, now, results)
 
+    # 3b. retention is best-effort maintenance, not part of the poll's success
+    # contract -- a prune error must never turn a successful poll into a
+    # failure, so it's caught and logged (no PII) rather than propagated.
+    try:
+        prune_snapshots(conn, now)
+    except Exception as exc:
+        logger.warning("snapshot prune failed: %s", type(exc).__name__)
+
     # total failure iff every attempted search raised (see docstring above).
     attempted = len(results)
     is_total_failure = attempted > 0 and failed_count == attempted
@@ -96,12 +110,26 @@ def run_poll(conn, source, settings: Settings, config: Config, now: datetime, tr
     # their originating pattern's window are candidates for an alert at all.
     matching_trips: list[Trip] = []
     for request, offers in results:
-        pattern = pattern_by_key.get(_request_key(request))
+        pattern = pattern_by_key.get(_date_pair_key(request))
         if pattern is None:
             continue
         for offer in offers:
             if trip_matches_windows(offer, pattern):
-                matching_trips.append(Trip(offer=offer, request=request, pattern=pattern))
+                # Phase 3: a matrix request's offers can each land on
+                # different ACTUAL airports -- build a concrete per-offer
+                # request carrying the offer's true origin/destination (not
+                # the matrix request's representative pair) so downstream
+                # history_for_pair, deal_identity, and record_alert all key
+                # on the real airports. Falls back to the request's
+                # representative pair only if the offer left them unset
+                # (legacy null case).
+                offer_request = SearchRequest(
+                    origin=offer.origin or request.origin,
+                    destination=offer.destination or request.destination,
+                    outbound_date=request.outbound_date,
+                    return_date=request.return_date,
+                )
+                matching_trips.append(Trip(offer=offer, request=offer_request, pattern=pattern))
 
     candidates_to_alert = best_per_identity(matching_trips)
 
@@ -123,7 +151,9 @@ def run_poll(conn, source, settings: Settings, config: Config, now: datetime, tr
     # didn't inject one (production); tests always inject a stub so no
     # network/SMTP call ever happens under test.
     if transport is None:
-        transport = lambda from_addr, to_addr, subject, body: send_smtp(from_addr, to_addr, subject, body, config)
+        transport = lambda from_addr, to_addr, subject, text_body, html_body: send_smtp(
+            from_addr, to_addr, subject, text_body, html_body, config
+        )
     alert_results = send_alerts(firing_pairs, settings, config, transport)
 
     # 7. record only alerts that were actually SENT live. Dry-run sends
@@ -136,7 +166,18 @@ def run_poll(conn, source, settings: Settings, config: Config, now: datetime, tr
             record_alert(conn, trip, decision, now)
 
     # 8. update poller_state and compute the exit code.
-    od_codes = sorted({_od_code(request) for request in request_list})
+    # Phase 3: a matrix request's representative O-D code is no longer
+    # informative on its own (candidates now carry whole airport lists) --
+    # log the DISTINCT ACTUAL O-D pairs seen across this cycle's results
+    # instead, falling back to the request's representative pair for any
+    # offer that left its own airports unset. Dates/email are never logged.
+    od_codes = sorted(
+        {
+            _od_code(offer.origin or request.origin, offer.destination or request.destination)
+            for request, offers in results
+            for offer in offers
+        }
+    )
     logger.info(
         "poll cycle: %d candidates, %d requests processed, %d failed (raised), "
         "%d snapshot rows written (%d request(s) failed to write), "
@@ -166,7 +207,7 @@ def main() -> int:
         settings, warnings = fetch_settings(conn)
         log_settings_warnings(warnings)
 
-        source = GoogleFlightsSource()
+        source = FliSource()
         now = datetime.now(NY_TZ)
         return run_poll(conn, source, settings, config, now)
     finally:

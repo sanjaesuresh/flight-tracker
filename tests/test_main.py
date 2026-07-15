@@ -60,7 +60,7 @@ def make_config():
     )
 
 
-def make_offer(price_usd, airline="Delta", stops=0, outbound_dep=time(18, 0)):
+def make_offer(price_usd, airline="Delta", stops=0, outbound_dep=time(18, 0), origin=None, destination=None):
     return Offer(
         price_usd=price_usd,
         airline=airline,
@@ -70,6 +70,8 @@ def make_offer(price_usd, airline="Delta", stops=0, outbound_dep=time(18, 0)):
         return_dep=None,
         return_arr=None,
         booking_url="https://example.com/book",
+        origin=origin,
+        destination=destination,
     )
 
 
@@ -105,8 +107,8 @@ class StubTransport:
         self.calls = []
         self.raise_error = raise_error
 
-    def __call__(self, from_addr, to_addr, subject, body):
-        self.calls.append((from_addr, to_addr, subject, body))
+    def __call__(self, from_addr, to_addr, subject, text_body, html_body):
+        self.calls.append((from_addr, to_addr, subject, text_body, html_body))
         if self.raise_error:
             raise RuntimeError("simulated SMTP failure")
 
@@ -162,6 +164,11 @@ class FakeCursor:
         elif "UPDATE POLLER_STATE" in upper:
             self.conn._apply_poller_state_update(sql, params)
             self._result = None
+        elif "DELETE FROM PRICE_SNAPSHOTS" in upper:
+            if self.conn.raise_on_prune:
+                raise RuntimeError("simulated prune failure")
+            self.conn.prune_deletes.append(params)
+            self._result = None
         else:
             raise AssertionError(f"FakeConn: unrecognized SQL: {sql}")
 
@@ -178,7 +185,7 @@ class FakeConn:
     (write + the two history reads), alerts_sent (read latest + upsert).
     """
 
-    def __init__(self, settings_row, poller_state, history=None):
+    def __init__(self, settings_row, poller_state, history=None, raise_on_prune=False):
         self.settings_row = settings_row
         self.poller_state = dict(poller_state)
         # history rows shaped (origin, destination, outbound_date, return_date, scraped_at, price_usd)
@@ -187,6 +194,10 @@ class FakeConn:
         self.alerts_sent: dict[tuple, int] = {}
         self.alerts_sent_rows = []
         self.events = []
+        # prune_snapshots' two DELETEs -- separate from `events` so existing
+        # assertions about insert/commit interleaving don't need updating.
+        self.prune_deletes = []
+        self.raise_on_prune = raise_on_prune
 
     def cursor(self):
         return FakeCursor(self)
@@ -232,6 +243,8 @@ def test_full_cycle_below_threshold_sends_one_alert_and_records_it(caplog):
     assert conn.poller_state["consecutive_failures"] == 0
     assert conn.poller_state["cursor"] == 5
     assert conn.poller_state["last_success"] == NOW
+    # prune_snapshots runs exactly once per poll, after the snapshot writes.
+    assert len(conn.prune_deletes) == 2
 
 
 def test_idempotent_rerun_with_unchanged_price_sends_no_second_alert():
@@ -255,6 +268,54 @@ def test_idempotent_rerun_with_unchanged_price_sends_no_second_alert():
 
     assert code2 == 0
     assert len(transport2.calls) == 0  # deduped -- no second send
+
+
+def test_matrix_offer_actual_airports_drive_snapshots_and_alert_identity_not_the_representative_pair():
+    """Phase 3: a matrix candidate's representative pair is settings'
+    preferred_origin/destination (LGA/YYZ here), but an offer that actually
+    flew a DIFFERENT pair (EWR->YTZ) must be stored AND alerted under its own
+    real airports -- never silently attributed to the representative pair.
+    """
+    settings_row = make_settings_row(
+        origins=["LGA", "EWR"], destinations=["YYZ", "YTZ"],
+        preferred_origin="LGA", preferred_destination="YYZ",
+    )
+    conn = FakeConn(settings_row, {"last_success": None, "consecutive_failures": 0, "cursor": 0})
+    settings, _ = _fetch(conn)
+
+    # the offer actually flew EWR->YTZ, distinct from the representative
+    # LGA->YYZ pair the matrix candidate carries.
+    offer = make_offer(200, origin="EWR", destination="YTZ")
+    source = FakeSource(offers_by_index={0: [offer]}, next_cursor=1)
+    transport = StubTransport()
+
+    code = run_poll(conn, source, settings, make_config(), NOW, transport=transport)
+
+    assert code == 0
+    # snapshot row carries the offer's ACTUAL airports.
+    assert len(conn.snapshots) == 1
+    assert conn.snapshots[0][1] == "EWR"
+    assert conn.snapshots[0][2] == "YTZ"
+
+    # the alert fired (below threshold) and was recorded under the REAL
+    # airports -- alerts_sent's identity tuple is (origin, destination,
+    # outbound_date, return_date, airline, stops_bucket).
+    assert len(conn.alerts_sent_rows) == 1
+    alert_identity = conn.alerts_sent_rows[0][:2]
+    assert alert_identity == ("EWR", "YTZ")
+    # the representative pair must NOT appear as the alert identity.
+    assert alert_identity != ("LGA", "YYZ")
+
+    # history_for_pair (queried during evaluate) must have been looked up
+    # under the real airports too -- verified via the executed SQL params.
+    history_lookups = [
+        event[2] for event in conn.events
+        if event[0] == "execute"
+        and "SCRAPED_AT, PRICE_USD" in event[1].upper()
+        and "OUTBOUND_DATE" in event[1].upper()
+    ]
+    assert history_lookups
+    assert history_lookups[0][:2] == ("EWR", "YTZ")
 
 
 def test_partial_success_three_of_four_requests_succeed():
@@ -371,6 +432,33 @@ def test_privacy_alert_email_never_logged_but_warnings_are(caplog):
     log_text = "\n".join(record.getMessage() for record in caplog.records)
     assert "do-not-leak@example.com" not in log_text
     assert "not-an-int" in log_text or "Dropping malformed pattern" in log_text
+
+
+def test_prune_failure_is_swallowed_and_does_not_fail_an_otherwise_successful_poll(caplog):
+    """Retention is best-effort maintenance, not part of the poll's success
+    contract: a raising prune_snapshots must not turn a successful poll into
+    a failure, and must not leak PII into the warning it logs."""
+    settings_row = make_settings_row()
+    conn = FakeConn(
+        settings_row,
+        {"last_success": None, "consecutive_failures": 0, "cursor": 0},
+        raise_on_prune=True,
+    )
+    source = FakeSource(offers_by_index={0: [make_offer(200)]}, next_cursor=5)
+    settings, _ = _fetch(conn)
+
+    with caplog.at_level(logging.WARNING):
+        code = run_poll(conn, source, settings, make_config(), NOW, transport=StubTransport())
+
+    assert code == 0  # prune raising must not affect the exit code
+    assert conn.poller_state["consecutive_failures"] == 0
+    assert conn.poller_state["last_success"] == NOW
+    assert conn.prune_deletes == []  # the raising DELETE never got recorded as succeeded
+
+    log_text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "snapshot prune failed" in log_text
+    assert "RuntimeError" in log_text
+    assert settings_row["alert_email"] not in log_text
 
 
 def _fetch(conn):
