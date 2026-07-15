@@ -58,6 +58,40 @@ describe('seed booking_url contract', () => {
   });
 });
 
+describe('seed date-pair alignment (Thu/Fri -> Sun patterns)', () => {
+  it('seeds every outbound_date on Thursday or Friday and every return_date on Sunday', async () => {
+    process.env.APP_PASSWORD = PW;
+    process.env.NODE_ENV = 'test';
+    const db = await createPgliteDb('normal');
+
+    // same noon-UTC anchor as timezone.ts / pglite.ts, so a "YYYY-MM-DD" date-only
+    // string can't get rolled to an adjacent day by the runner's local zone.
+    // NOTE: this is JS Date#getUTCDay() (Sun=0…Sat=6), NOT the poller's
+    // Mon=0…Sun=6 convention — Thursday is 4 here, Friday is 5, Sunday is 0.
+    const weekdayOf = (isoDate: string): number =>
+      new Date(`${isoDate}T12:00:00Z`).getUTCDay();
+
+    const rows = await db.query<{ outbound_date: string; return_date: string }>(
+      `SELECT outbound_date::text, return_date::text FROM price_snapshots`,
+    );
+    expect(rows.length).toBeGreaterThan(0);
+
+    for (const row of rows) {
+      const outDow = weekdayOf(row.outbound_date);
+      expect([4, 5]).toContain(outDow); // Thursday or Friday
+      expect(weekdayOf(row.return_date)).toBe(0); // Sunday
+
+      // each pattern's fixed trip length must still hold: Thu->Sun is a 3-day
+      // trip, Fri->Sun is a 2-day trip (the exact bug this test locks in).
+      const expectedLength = outDow === 4 ? 3 : 2;
+      const out = new Date(`${row.outbound_date}T12:00:00Z`);
+      const ret = new Date(`${row.return_date}T12:00:00Z`);
+      const diffDays = Math.round((ret.getTime() - out.getTime()) / (1000 * 60 * 60 * 24));
+      expect(diffDays).toBe(expectedLength);
+    }
+  });
+});
+
 describe('seed per-option history shape (Phase 5)', () => {
   it('seeds multi-hour histories, a sparse key, and a null-key fallback row', async () => {
     process.env.APP_PASSWORD = PW;

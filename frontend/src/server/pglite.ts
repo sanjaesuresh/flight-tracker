@@ -28,8 +28,61 @@ const DESTINATIONS = ['YYZ', 'YTZ'];
 const AIRLINES = ['Air Canada', 'United', 'Delta', 'Porter'];
 // IATA codes matching AIRLINES by index — itinerary keys use codes like fli does.
 const CODES = ['AC', 'UA', 'DL', 'PD'];
-// day offsets from NY-today for synthetic outbound dates (all inside the window)
-const OUTBOUND_OFFSETS = [21, 22, 28, 35, 42];
+
+// JS Date#getUTCDay() convention (Sun=0…Sat=6) — NOT the poller's Mon=0…Sun=6
+// convention used in settingsSchema.ts's DEFAULT_PATTERNS. Thursday=3 there is
+// Thursday=4 here; Friday=4 there is Friday=5 here. Keep the conversion explicit
+// wherever both worlds meet so this file never silently reintroduces the mismatch.
+const JS_THURSDAY = 4;
+const JS_FRIDAY = 5;
+const JS_SUNDAY = 0;
+
+// Walk forward from `from` (a "YYYY-MM-DD") to find the `occurrence`-th
+// (0-indexed) date whose JS UTC weekday is `targetDow`, anchored at noon UTC
+// like the rest of timezone.ts so no offset can roll it to an adjacent day.
+function nthUpcomingWeekday(from: string, targetDow: number, occurrence: number): string {
+  let d = from;
+  let seen = 0;
+  // 60 days covers the whole rolling window with room to spare; bail out well
+  // past that so a bug here fails loudly instead of looping forever.
+  for (let i = 0; i < 120; i++) {
+    if (new Date(`${d}T12:00:00Z`).getUTCDay() === targetDow) {
+      if (seen === occurrence) return d;
+      seen++;
+    }
+    d = addDays(d, 1);
+  }
+  throw new Error(`nthUpcomingWeekday: no match for dow=${targetDow} within window`);
+}
+
+// The two configured trip patterns (settingsSchema.ts DEFAULT_PATTERNS), realized
+// as actual upcoming date-pairs instead of arbitrary day offsets: real Thursdays
+// paired with that week's Sunday (+3d), real Fridays paired with that week's
+// Sunday (+2d). Five pairs total — same row-count order of magnitude as the old
+// OUTBOUND_OFFSETS — with both pattern shapes represented.
+function seedDatePairs(): Array<{ outboundDate: string; returnDate: string }> {
+  const today = nyTodayString();
+  const pairs: Array<{ outboundDate: string; returnDate: string }> = [];
+  for (let k = 0; k < 3; k++) {
+    const thu = nthUpcomingWeekday(today, JS_THURSDAY, k);
+    const sun = addDays(thu, 3);
+    // guard the exact bug this fix closes: a hardcoded "+3" only lands on
+    // Sunday because the outbound is really Thursday — assert it explicitly.
+    if (new Date(`${sun}T12:00:00Z`).getUTCDay() !== JS_SUNDAY) {
+      throw new Error(`seedDatePairs: Thu+3 (${thu} -> ${sun}) did not land on Sunday`);
+    }
+    pairs.push({ outboundDate: thu, returnDate: sun });
+  }
+  for (let k = 0; k < 2; k++) {
+    const fri = nthUpcomingWeekday(today, JS_FRIDAY, k);
+    const sun = addDays(fri, 2);
+    if (new Date(`${sun}T12:00:00Z`).getUTCDay() !== JS_SUNDAY) {
+      throw new Error(`seedDatePairs: Fri+2 (${fri} -> ${sun}) did not land on Sunday`);
+    }
+    pairs.push({ outboundDate: fri, returnDate: sun });
+  }
+  return pairs;
+}
 
 function pricesFor(origin: string, destination: string, offset: number): number {
   // preferred LGA→YYZ trends cheapest so the "preferred" boost is visible.
@@ -43,7 +96,8 @@ interface SeedRow {
   scrapeAgo: string; // self-authored SQL expression, never user input
   origin: string;
   destination: string;
-  offset: number;
+  outboundDate: string; // "YYYY-MM-DD", already pattern-aligned by seedDatePairs
+  returnDate: string; // "YYYY-MM-DD", already pattern-aligned by seedDatePairs
   price: number;
   airline: string | null;
   stops: number | null;
@@ -71,15 +125,14 @@ async function insertSnapshot(pg: PGlite, r: SeedRow): Promise<void> {
         return_arr_time, booking_url, itinerary_key, outbound_airline,
         return_airline, outbound_flight_numbers, return_flight_numbers,
         outbound_stops, return_stops)
-     VALUES (${r.scrapeAgo}, $1, $2,
-       (now() at time zone 'America/New_York')::date + $3::int,
-       (now() at time zone 'America/New_York')::date + ($3::int + 3),
-       $4, $5, $6, $7::time, $8::time, $9::time, $10::time, $11, $12, $13, $14,
-       $15, $16, $17, $18)`,
+     VALUES (${r.scrapeAgo}, $1, $2, $3::date, $4::date,
+       $5, $6, $7, $8::time, $9::time, $10::time, $11::time, $12, $13, $14, $15,
+       $16, $17, $18, $19)`,
     [
       r.origin,
       r.destination,
-      r.offset,
+      r.outboundDate,
+      r.returnDate,
       r.price,
       r.airline,
       r.stops,
@@ -99,7 +152,7 @@ async function insertSnapshot(pg: PGlite, r: SeedRow): Promise<void> {
   );
 }
 
-// Seed per date-pair (i indexes the 20 O-D×offset pairs):
+// Seed per date-pair (i indexes the 20 O-D×date-pair combinations):
 //   - default: TWO distinct itineraries — a single-carrier one with 6 hourly
 //     price points and a mixed-carrier one (different airline per direction)
 //     with 3 — so per-option charts and min/max/median have real-looking data,
@@ -113,19 +166,21 @@ async function insertSnapshot(pg: PGlite, r: SeedRow): Promise<void> {
 // Phase 1 rule stays intact: booking_url is a real dated Google Flights query
 // (never `?ref=`), and the i%7==6 pairs (6 and 13) carry a null booking_url.
 async function seedSnapshots(pg: PGlite, agoExpr: string): Promise<void> {
+  const datePairs = seedDatePairs();
   let i = 0;
   for (const origin of ORIGINS) {
     for (const destination of DESTINATIONS) {
-      for (const offset of OUTBOUND_OFFSETS) {
-        const price = pricesFor(origin, destination, offset);
+      for (let pairIdx = 0; pairIdx < datePairs.length; pairIdx++) {
+        const { outboundDate, returnDate } = datePairs[pairIdx];
+        // pairIdx stands in for the old arbitrary day-offset — still just a
+        // spread-the-values knob for pricesFor(), no longer a date input.
+        const price = pricesFor(origin, destination, pairIdx);
         const outDep = ['07:15', '12:40', '18:30', '21:05'][i % 4];
         const outArr = ['08:50', '14:10', '20:05', '22:35'][i % 4];
         // return-leg times are REAL now (fli carries them); only the i==13
         // fallback row below keeps them null like old fast-flights rows.
         const retDep = ['09:10', '13:45', '17:05', '20:30'][i % 4];
         const retArr = ['10:40', '15:20', '18:35', '22:00'][i % 4];
-        const outboundDate = addDays(nyTodayString(), offset);
-        const returnDate = addDays(nyTodayString(), offset + 3);
         const booking =
           i % 7 === 6
             ? null
@@ -135,7 +190,8 @@ async function seedSnapshots(pg: PGlite, agoExpr: string): Promise<void> {
         const common = {
           origin,
           destination,
-          offset,
+          outboundDate,
+          returnDate,
           outDep,
           outArr,
           retDep,
