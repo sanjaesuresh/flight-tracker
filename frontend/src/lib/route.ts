@@ -41,7 +41,27 @@ export function optionHashFor(s: PriceSnapshot): string | null {
   });
 }
 
+// App calls parseOptionHash on mount and on every hashchange, so it's the one choke
+// point where every route transition passes through — reuse it to remember whether
+// the route we're leaving was itself an option route, so the detail page's back link
+// can tell "arrived from the board" apart from a deep link / fresh page load.
+let hasSeenPriorHash = false;
+let priorHashWasOption = false;
+let previousWasBoard = false;
+
 export function parseOptionHash(hash: string): OptionParams | null {
+  // capture the transition BEFORE recording this call, so it reflects the hash we're
+  // arriving from, not the one we're about to parse
+  previousWasBoard = hasSeenPriorHash && !priorHashWasOption;
+
+  const parsed = parseOptionHashParams(hash);
+
+  hasSeenPriorHash = true;
+  priorHashWasOption = parsed !== null;
+  return parsed;
+}
+
+function parseOptionHashParams(hash: string): OptionParams | null {
   if (!hash.startsWith(OPTION_PREFIX)) return null;
   const q = new URLSearchParams(hash.slice(OPTION_PREFIX.length));
   const origin = q.get('origin');
@@ -57,4 +77,11 @@ export function parseOptionHash(hash: string): OptionParams | null {
     return_date: ret,
     itinerary_key: key,
   };
+}
+
+// true when the hash active immediately before the current one was NOT an option
+// route (i.e. the board) — false for a deep link / fresh load, where there is no
+// prior hash to compare against.
+export function cameFromBoard(): boolean {
+  return previousWasBoard;
 }

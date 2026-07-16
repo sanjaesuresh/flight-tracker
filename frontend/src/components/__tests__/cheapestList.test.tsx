@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { CheapestList } from '../CheapestList.tsx';
+import { optionHashFor } from '../../lib/route.js';
 import type { RankedOption } from '../../lib/types.js';
 
 const option = (p: Partial<RankedOption>): RankedOption => ({
@@ -73,5 +74,76 @@ describe('CheapestList detail links', () => {
   it('renders NO detail link when itinerary_key is null (fallback rows)', () => {
     render(<CheapestList options={[option({ itinerary_key: null })]} />);
     expect(screen.queryByRole('link', { name: /price history/i })).toBeNull();
+  });
+});
+
+describe('CheapestList row affordances', () => {
+  it('(a) renders a Details link, accessible name containing "Details", hrefed to the option hash', () => {
+    const o = option({ itinerary_key: 'AC1123.2026-08-06|AC2211.2026-08-09' });
+    render(<CheapestList options={[o]} />);
+    const link = screen.getByRole('link', { name: /details/i });
+    expect(link).toHaveAttribute('href', optionHashFor(o)!);
+  });
+
+  it('(b) renders a Book link, accessible name containing "Book", exact booking_url href, new tab, noopener', () => {
+    const o = option({ booking_url: 'https://gf.example/lga-yyz-185' });
+    render(<CheapestList options={[o]} />);
+    const link = screen.getByRole('link', { name: /book/i });
+    expect(link).toHaveAttribute('href', 'https://gf.example/lga-yyz-185');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link.getAttribute('rel') ?? '').toContain('noopener');
+  });
+
+  it('(c) renders the price as plain text, never inside an anchor', () => {
+    render(<CheapestList options={[option({ price_usd: 222 })]} />);
+    const priceText = screen.getByText('$222');
+    expect(priceText.closest('a')).toBeNull();
+  });
+
+  it('(d) renders "No history yet" in the Details slot when itinerary_key is null', () => {
+    render(<CheapestList options={[option({ itinerary_key: null })]} />);
+    expect(screen.getByText('No history yet')).toBeInTheDocument();
+  });
+
+  it('(e) renders "no link" and no Book link when booking_url is null', () => {
+    render(<CheapestList options={[option({ booking_url: null })]} />);
+    expect(screen.getByText('no link')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /book/i })).toBeNull();
+  });
+
+  it('(f) clicking anywhere on a row with a details href navigates by setting window.location.hash', () => {
+    const o = option({ itinerary_key: 'AC1123.2026-08-06|AC2211.2026-08-09' });
+    render(<CheapestList options={[o]} />);
+    window.location.hash = '';
+    // click on plain cell text, not on any anchor/button, to prove the whole row is live
+    fireEvent.click(screen.getByText(o.airline!));
+    expect(window.location.hash).toBe(optionHashFor(o)!);
+  });
+
+  it('(g) clicking the Book link does not hijack row navigation (hash stays put)', () => {
+    const o = option({
+      itinerary_key: 'AC1123.2026-08-06|AC2211.2026-08-09',
+      booking_url: 'https://gf.example/lga-yyz-185',
+    });
+    render(<CheapestList options={[o]} />);
+    window.location.hash = '';
+    fireEvent.click(screen.getByRole('link', { name: /book/i }));
+    expect(window.location.hash).toBe('');
+  });
+});
+
+describe('CheapestList empty state', () => {
+  it('shows no Clear filters button when onClearFilters is not provided', () => {
+    render(<CheapestList options={[]} />);
+    expect(screen.getByText(/no fares match/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /clear filters/i })).toBeNull();
+  });
+
+  it('shows a Clear filters button when onClearFilters is provided, and clicking it calls the handler', () => {
+    const onClearFilters = vi.fn();
+    render(<CheapestList options={[]} onClearFilters={onClearFilters} />);
+    const clear = screen.getByRole('button', { name: /clear filters/i });
+    fireEvent.click(clear);
+    expect(onClearFilters).toHaveBeenCalledTimes(1);
   });
 });

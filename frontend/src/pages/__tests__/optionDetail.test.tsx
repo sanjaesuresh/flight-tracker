@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { OptionDetail } from '../OptionDetail.tsx';
 import { AuthProvider } from '../../auth/AuthProvider.tsx';
 import { api, ApiError } from '../../lib/api.js';
+import { optionHash, parseOptionHash } from '../../lib/route.js';
 import type { OptionParams } from '../../lib/route.js';
 import type { OptionHistoryPayload, PriceSnapshot } from '../../lib/types.js';
 
@@ -161,5 +162,54 @@ describe('OptionDetail', () => {
     const retry = await screen.findByRole('button', { name: /try again/i });
     fireEvent.click(retry);
     expect(await screen.findByRole('heading', { name: /LGA → YYZ/ })).toBeInTheDocument();
+  });
+
+  // this test must run before any other test in this file calls parseOptionHash: it
+  // relies on route.ts's tracking never having seen a hash change, i.e. a fresh page
+  // load straight into a deep-linked detail URL, which has no "previous route" at all
+  it('back link falls back to the "#/" href when there is no prior route (deep link)', async () => {
+    api.optionHistory = vi.fn().mockResolvedValue(payload(manyPoints));
+    const backSpy = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    renderDetail();
+    await screen.findByRole('heading', { name: /LGA → YYZ/ });
+    const back = screen.getByRole('link', { name: /back to the board/i });
+    expect(back).toHaveAttribute('href', '#/');
+    // dispatchEvent (what fireEvent wraps) returns true when nothing called preventDefault,
+    // i.e. the browser is left free to follow the href — the desired fallback behavior here
+    const notPrevented = fireEvent.click(back);
+    expect(notPrevented).toBe(true);
+    expect(backSpy).not.toHaveBeenCalled();
+    backSpy.mockRestore();
+  });
+
+  it('back link uses history.back() (not the href) when the user arrived from the board', async () => {
+    // simulate what App.tsx does on real navigation: board hash, then this option's hash
+    parseOptionHash('#/');
+    parseOptionHash(optionHash(params));
+    api.optionHistory = vi.fn().mockResolvedValue(payload(manyPoints));
+    const backSpy = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    renderDetail();
+    await screen.findByRole('heading', { name: /LGA → YYZ/ });
+    // dispatchEvent returns false when a handler called preventDefault — confirms the
+    // onClick suppressed the href navigation instead of letting it fall through
+    const notPrevented = fireEvent.click(screen.getByRole('link', { name: /back to the board/i }));
+    expect(notPrevented).toBe(false);
+    expect(backSpy).toHaveBeenCalledTimes(1);
+    backSpy.mockRestore();
+  });
+
+  it('back link opens in new tab on cmd/ctrl+click (does not call history.back)', async () => {
+    // simulate what App.tsx does on real navigation: board hash, then this option's hash
+    parseOptionHash('#/');
+    parseOptionHash(optionHash(params));
+    api.optionHistory = vi.fn().mockResolvedValue(payload(manyPoints));
+    const backSpy = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    renderDetail();
+    await screen.findByRole('heading', { name: /LGA → YYZ/ });
+    // cmd+click should not prevent default, letting the browser open in new tab
+    const notPrevented = fireEvent.click(screen.getByRole('link', { name: /back to the board/i }), { metaKey: true });
+    expect(notPrevented).toBe(true);
+    expect(backSpy).not.toHaveBeenCalled();
+    backSpy.mockRestore();
   });
 });

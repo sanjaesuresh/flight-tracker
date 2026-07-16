@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyFilters, buildSeries, distinctAirlines, historyStats, rankOptions } from '../filter.js';
 import type { FilterState, PriceSnapshot, Settings } from '../types.js';
-import { emptyFilter } from '../filter.js';
+import { emptyFilter, isEmptyFilter } from '../filter.js';
 
 function snap(p: Partial<PriceSnapshot>): PriceSnapshot {
   return {
@@ -65,12 +65,43 @@ describe('applyFilters', () => {
     expect(out.map((s) => s.price_usd)).toEqual([200]);
   });
 
-  it('non-stop filter keeps stops=0 and unknown, drops stops>=1', () => {
+  it('exact 0-stops bucket keeps stops=0 and unknown, drops stops>=1', () => {
     const rows = [snap({ stops: 0 }), snap({ stops: 1 }), snap({ stops: null })];
-    const out = applyFilters(rows, F({ maxStops: 0 }));
+    const out = applyFilters(rows, F({ stops: 0 }));
     // stops=0 kept, stops=1 dropped, stops=null (unknown) kept — never hidden
     expect(out).toHaveLength(2);
     expect(out.some((s) => s.stops === null)).toBe(true);
+  });
+
+  it('exact 1-stop bucket keeps only stops=1 (and unknown)', () => {
+    const rows = [snap({ stops: 0 }), snap({ stops: 1 }), snap({ stops: 2 }), snap({ stops: null })];
+    const out = applyFilters(rows, F({ stops: 1 }));
+    // exact match on 1, plus the unknown that's never hidden
+    expect(out.map((s) => s.stops).sort()).toEqual([1, null]);
+  });
+
+  it('2+ bucket keeps stops>=2 (and unknown), drops 0 and 1', () => {
+    const rows = [snap({ stops: 0 }), snap({ stops: 1 }), snap({ stops: 2 }), snap({ stops: 3 }), snap({ stops: null })];
+    const out = applyFilters(rows, F({ stops: 2 }));
+    expect(out.map((s) => s.stops).sort()).toEqual([2, 3, null]);
+  });
+
+  it('bounds outbound and return travel dates inclusively', () => {
+    const rows = [
+      snap({ outbound_date: '2026-08-01', return_date: '2026-08-05' }), // before outbound window
+      snap({ outbound_date: '2026-08-10', return_date: '2026-08-14' }), // inside both
+      snap({ outbound_date: '2026-08-12', return_date: '2026-08-30' }), // return after window
+    ];
+    const out = applyFilters(
+      rows,
+      F({
+        outboundDateFrom: '2026-08-06',
+        outboundDateTo: '2026-08-15',
+        returnDateFrom: '2026-08-06',
+        returnDateTo: '2026-08-20',
+      }),
+    );
+    expect(out.map((s) => s.outbound_date)).toEqual(['2026-08-10']);
   });
 
   it('applies inclusive price bounds', () => {
@@ -133,6 +164,44 @@ describe('buildSeries', () => {
     expect(series).toHaveLength(2);
     const lga = series.find((s) => s.key === 'LGA-YYZ')!;
     expect(lga.points[0].price_usd).toBe(180);
+  });
+});
+
+describe('buildSeries point.flight', () => {
+  it('a point carries the cheapest snapshot for its route and date', () => {
+    const rows = [
+      snap({ price_usd: 250, airline: 'United' }),
+      snap({ price_usd: 199, airline: 'Delta' }),
+      snap({ price_usd: 230, airline: 'Air Canada' }),
+    ];
+    const series = buildSeries(rows);
+    const points = series.find((s) => s.key === 'LGA-YYZ')!.points;
+    expect(points).toHaveLength(1);
+    expect(points[0].price_usd).toBe(199);
+    expect(points[0].flight.airline).toBe('Delta');
+  });
+
+  it('among equal cheapest prices the most recently scraped snapshot wins', () => {
+    const rows = [
+      snap({ price_usd: 200, airline: 'Delta', scraped_at: '2026-07-14T18:00:00Z' }),
+      snap({ price_usd: 200, airline: 'United', scraped_at: '2026-07-14T10:00:00Z' }),
+    ];
+    const series = buildSeries(rows);
+    const points = series.find((s) => s.key === 'LGA-YYZ')!.points;
+    expect(points).toHaveLength(1);
+    expect(points[0].flight.scraped_at).toBe('2026-07-14T18:00:00Z');
+  });
+});
+
+describe('isEmptyFilter', () => {
+  it('is true for a freshly-built empty filter', () => {
+    expect(isEmptyFilter(emptyFilter())).toBe(true);
+  });
+
+  it('is false once any single field is set', () => {
+    expect(isEmptyFilter(F({ priceMax: 300 }))).toBe(false);
+    expect(isEmptyFilter(F({ airlines: ['Delta'] }))).toBe(false);
+    expect(isEmptyFilter(F({ stops: 0 }))).toBe(false);
   });
 });
 

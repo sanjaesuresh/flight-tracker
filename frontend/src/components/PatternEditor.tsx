@@ -50,7 +50,7 @@ function TimeWindow({
 }) {
   return (
     <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-      <legend style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 560 }}>
+      <legend className="legend-label">
         {label} <span className="muted">(blank = any time)</span>
       </legend>
       <div className="leg-times">

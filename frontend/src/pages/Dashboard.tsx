@@ -23,8 +23,10 @@ import {
 type Status = 'loading' | 'error' | 'ready';
 interface Data {
   snapshots: SnapshotsPayload;
-  health: PollerHealth;
-  settings: Settings;
+  // health/settings are independently-degradable: null means that call failed
+  // (non-401) rather than "no data" — callers must not conflate the two.
+  health: PollerHealth | null;
+  settings: Settings | null;
 }
 
 export function Dashboard() {
@@ -35,22 +37,35 @@ export function Dashboard() {
 
   const load = useCallback(async () => {
     setStatus('loading');
-    try {
-      const [snapshots, health, settings] = await Promise.all([
-        api.snapshots(),
-        api.health(),
-        api.getSettings(),
-      ]);
-      setData({ snapshots, health, settings });
-      setStatus('ready');
-    } catch (err) {
-      // an expired session anywhere drops the whole app back to login.
-      if (err instanceof ApiError && err.status === 401) {
+    // settle-all: health/settings are supporting signals, not load-bearing — a
+    // hiccup in either degrades gracefully instead of blanking the whole board.
+    // snapshots is the one call the board can't render without, so it stays fatal.
+    const [snapshotsResult, healthResult, settingsResult] = await Promise.allSettled([
+      api.snapshots(),
+      api.health(),
+      api.getSettings(),
+    ]);
+
+    // a 401 from ANY call means the session is dead — drop back to login
+    // regardless of which endpoint noticed first (existing sign-out path).
+    for (const result of [snapshotsResult, healthResult, settingsResult]) {
+      if (result.status === 'rejected' && result.reason instanceof ApiError && result.reason.status === 401) {
         markLoggedOut();
         return;
       }
-      setStatus('error');
     }
+
+    if (snapshotsResult.status === 'rejected') {
+      setStatus('error');
+      return;
+    }
+
+    setData({
+      snapshots: snapshotsResult.value,
+      health: healthResult.status === 'fulfilled' ? healthResult.value : null,
+      settings: settingsResult.status === 'fulfilled' ? settingsResult.value : null,
+    });
+    setStatus('ready');
   }, [markLoggedOut]);
 
   useEffect(() => {
@@ -61,10 +76,16 @@ export function Dashboard() {
     if (!data) return null;
     const filtered = applyFilters(data.snapshots.latest, filter);
     return {
-      ranked: rankOptions(filtered, data.settings),
+      // no settings → no preferred pair to flag; fall back to a plain price
+      // sort (rankOptions' own tiebreak once "preferred" is always false).
+      ranked: data.settings
+        ? rankOptions(filtered, data.settings)
+        : [...filtered].sort((a, b) => a.price_usd - b.price_usd).map((s) => ({ ...s, preferred: false })),
       series: buildSeries(filtered),
       airlines: distinctAirlines(data.snapshots.latest),
-      health: deriveHealth(data.health, data.snapshots.newest_scraped_at),
+      // a failed health fetch means "no signal", not "known stale" — suppress
+      // the banner outright rather than guessing staleness from it.
+      health: data.health ? deriveHealth(data.health, data.snapshots.newest_scraped_at) : null,
     };
   }, [data, filter]);
 
@@ -82,9 +103,14 @@ export function Dashboard() {
 
   return (
     <div className="stack">
-      {/* failing takes priority over stale — "broken" and "old" are distinct signals */}
-      {health.failing && <FailingBanner lastDataIso={health.lastDataIso} />}
-      {!health.failing && health.stale && <StaleBanner lastDataIso={health.lastDataIso} />}
+      {/* visually hidden — the page has no visible title otherwise (the h2s are
+          section-level); still needs to be first in the a11y tree */}
+      <h1 className="sr-only">Flight watch — fare dashboard</h1>
+      {/* failing takes priority over stale — "broken" and "old" are distinct signals.
+          health === null means the health call itself failed, not that we know
+          anything is stale/failing, so no banner renders at all. */}
+      {health?.failing && <FailingBanner lastDataIso={health.lastDataIso} />}
+      {health && !health.failing && health.stale && <StaleBanner lastDataIso={health.lastDataIso} />}
 
       {!hasData ? (
         <EmptyState />
@@ -145,11 +171,16 @@ export function Dashboard() {
             <section aria-labelledby="list-h">
               <div className="section-head">
                 <h2 id="list-h">Fare board</h2>
-                <span className="count">
+                {/* count changes on every filter tweak — polite so a screen reader
+                    announces the new tally without interrupting current focus */}
+                <span className="count" aria-live="polite">
                   {derived.ranked.length} of {data.snapshots.latest.length} shown
                 </span>
               </div>
-              <CheapestList options={derived.ranked} />
+              {/* CheapestList only renders when hasData is true, so an empty ranked
+                  list here is always a filter mismatch, never "no board data" —
+                  safe to always offer the same reset the sidebar's Reset button uses */}
+              <CheapestList options={derived.ranked} onClearFilters={() => setFilter(emptyFilter())} />
             </section>
           </div>
         </div>

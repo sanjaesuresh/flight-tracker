@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Dashboard } from '../Dashboard.tsx';
 import { AuthProvider } from '../../auth/AuthProvider.tsx';
 import { api } from '../../lib/api.js';
@@ -101,5 +102,101 @@ describe('Dashboard fare board', () => {
     // a row with no booking_url shows the fare but no link
     expect(screen.getByText('no link')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /500 US dollars/i })).toBeNull();
+  });
+});
+
+describe('Dashboard fetch resilience', () => {
+  beforeEach(() => {
+    api.session = vi.fn().mockResolvedValue({ authenticated: true });
+    api.health = vi.fn().mockResolvedValue({
+      last_success: '2026-07-15T11:30:00Z',
+      consecutive_failures: 0,
+      newest_scraped_at: '2026-07-15T11:30:00Z',
+    });
+    api.getSettings = vi.fn().mockResolvedValue(settings);
+    api.snapshots = vi.fn().mockResolvedValue({
+      latest: [
+        snap({ origin: 'LGA', destination: 'YYZ', price_usd: 185, booking_url: 'https://gf.example/lga-yyz-185' }),
+        snap({ origin: 'JFK', destination: 'YTZ', price_usd: 150, booking_url: 'https://gf.example/jfk-ytz-150' }),
+        snap({ origin: 'LGA', destination: 'YTZ', price_usd: 500, booking_url: null }),
+      ],
+      newest_scraped_at: '2026-07-15T11:30:00Z',
+    });
+  });
+
+  it('(a) a health-only failure still renders the board with no error page and no health banner', async () => {
+    api.health = vi.fn().mockRejectedValue(new Error('health unreachable'));
+    render(
+      <AuthProvider>
+        <Dashboard />
+      </AuthProvider>,
+    );
+    await screen.findByText(/fare board/i);
+    expect(screen.getByText('$150', { selector: '.fare' })).toBeInTheDocument();
+    expect(screen.queryByText(/board offline/i)).toBeNull();
+    expect(screen.queryByText(/disrupted/i)).toBeNull();
+    expect(screen.queryByText(/delayed/i)).toBeNull();
+  });
+
+  it('(b) a settings-only (non-401) failure still renders the board with no preferred dots', async () => {
+    api.getSettings = vi.fn().mockRejectedValue(new Error('settings unreachable'));
+    render(
+      <AuthProvider>
+        <Dashboard />
+      </AuthProvider>,
+    );
+    await screen.findByText(/fare board/i);
+    expect(screen.getByText('$150', { selector: '.fare' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('preferred route')).toBeNull();
+  });
+
+  it('(c) a snapshots failure still surfaces the board-offline error state with retry', async () => {
+    api.snapshots = vi.fn().mockRejectedValue(new Error('db unreachable'));
+    render(
+      <AuthProvider>
+        <Dashboard />
+      </AuthProvider>,
+    );
+    expect(await screen.findByText(/board offline/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
+  });
+
+  it('(d) renders a screen-reader-only level-1 heading', async () => {
+    render(
+      <AuthProvider>
+        <Dashboard />
+      </AuthProvider>,
+    );
+    await screen.findByText(/fare board/i);
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+  });
+
+  it('(e) the fares count is announced via aria-live=polite', async () => {
+    render(
+      <AuthProvider>
+        <Dashboard />
+      </AuthProvider>,
+    );
+    const count = await screen.findByText(/shown/i);
+    expect(count).toHaveAttribute('aria-live', 'polite');
+  });
+
+  it('(f) an active filter matching nothing shows a Clear filters button that restores the rows', async () => {
+    render(
+      <AuthProvider>
+        <Dashboard />
+      </AuthProvider>,
+    );
+    await screen.findByText(/fare board/i);
+    // scope to the fare-board region: the price graph has its own "no fares
+    // match" empty state and would otherwise collide with the same text
+    const board = screen.getByRole('region', { name: /fare board/i });
+    // a max price below every fare on the board excludes all rows
+    await userEvent.type(screen.getByLabelText(/maximum price/i), '1');
+    expect(await within(board).findByText(/no fares match/i)).toBeInTheDocument();
+    const clear = within(board).getByRole('button', { name: /clear filters/i });
+    await userEvent.click(clear);
+    expect(await within(board).findByText('$150', { selector: '.fare' })).toBeInTheDocument();
+    expect(within(board).queryByText(/no fares match/i)).toBeNull();
   });
 });

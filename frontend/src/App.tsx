@@ -1,10 +1,12 @@
-// Top-level auth gate + shell. Loading → splash; anonymous → login; authenticated
-// → the topbar shell with a Dashboard/Settings switch. View is local state (this
-// is a two-view personal tool, not a routed app); the ONE deep route is the
-// per-option detail page, carried in the URL hash so board rows are real links.
+// Top-level shell. The dashboard is public: the topbar + Dashboard/Settings
+// switch always render, regardless of auth status. "Sign out" only shows once
+// authenticated (there's nothing to sign out of otherwise). Settings itself
+// decides whether it's locked or editable based on auth status (see Settings.tsx).
+// View is local state (this is a two-view personal tool, not a routed app); the
+// ONE deep route is the per-option detail page, carried in the URL hash so board
+// rows are real links.
 import { useEffect, useState } from 'react';
 import { useAuth } from './auth/AuthProvider.tsx';
-import { LoginScreen } from './auth/LoginScreen.tsx';
 import { BrandMark } from './components/BrandMark.tsx';
 import { Dashboard } from './pages/Dashboard.tsx';
 import { OptionDetail } from './pages/OptionDetail.tsx';
@@ -32,19 +34,6 @@ export function App() {
     setView(next);
   };
 
-  if (status === 'loading') {
-    return (
-      <div className="login-wrap" aria-busy="true">
-        <div className="brand">
-          <BrandMark />
-          Flight watch
-        </div>
-      </div>
-    );
-  }
-
-  if (status === 'anonymous') return <LoginScreen />;
-
   return (
     <div className="shell">
       <header className="topbar">
@@ -57,7 +46,9 @@ export function App() {
           <nav className="nav" aria-label="Primary">
             <button
               className="tab"
-              aria-current={!optionRoute && view === 'dashboard' ? 'page' : undefined}
+              // an option-detail route is a child of the board, so Dashboard stays
+              // current there regardless of the last tab-click view
+              aria-current={view === 'dashboard' || optionRoute ? 'page' : undefined}
               onClick={() => goTo('dashboard')}
             >
               Dashboard
@@ -69,9 +60,11 @@ export function App() {
             >
               Settings
             </button>
-            <button className="btn btn-ghost" onClick={() => void logout()}>
-              Sign out
-            </button>
+            {status === 'authenticated' && (
+              <button className="btn btn-ghost" onClick={() => void logout()}>
+                Sign out
+              </button>
+            )}
           </nav>
         </div>
       </header>

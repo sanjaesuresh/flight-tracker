@@ -6,11 +6,32 @@
 // alternative is always available.
 import { useMemo } from 'react';
 import type { HistoryPoint } from '../lib/types.js';
-import { formatShortTimestamp, formatTimestamp } from '../lib/timezone.js';
+import { formatShortTimestamp, formatTimestamp, NY_TZ } from '../lib/timezone.js';
 
 const W = 760;
 const H = 280;
 const PAD = { top: 16, right: 16, bottom: 40, left: 52 };
+
+// NY-local calendar day for same-day comparisons — a sibling to timezone.ts's own
+// day-key logic, kept local since it only feeds x-label shortening here.
+const dayKeyFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: NY_TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+// hour-only, matching formatShortTimestamp's own hour formatting so the two compose
+// (full label minus its leading date reads identically to this alone).
+const hourFmt = new Intl.DateTimeFormat('en-US', { timeZone: NY_TZ, hour: 'numeric' });
+
+// full "Jul 14, 3 PM" on the first label of a day, just "9 PM" on repeats of the
+// same day — keeps a dense hourly axis from repeating the date on every tick.
+function formatXTick(iso: string, prevIso: string | null): string {
+  if (prevIso && dayKeyFmt.format(new Date(iso)) === dayKeyFmt.format(new Date(prevIso))) {
+    return hourFmt.format(new Date(iso));
+  }
+  return formatShortTimestamp(iso);
+}
 
 export function OptionPriceChart({ points, label }: { points: HistoryPoint[]; label: string }) {
   const model = useMemo(() => {
@@ -22,7 +43,10 @@ export function OptionPriceChart({ points, label }: { points: HistoryPoint[]; la
     const t1 = times[times.length - 1];
     const minP = Math.min(...prices);
     const maxP = Math.max(...prices);
-    // pad the price axis so the line doesn't hug the edges; guard flat series.
+    // pad the price axis so the line doesn't hug the edges; guard flat series. this
+    // zoomed y-domain is deliberate (it's what makes small dips visible), so lo > 0
+    // means the axis is cropped above zero — the render below marks that crop rather
+    // than hiding it.
     const lo = Math.max(0, Math.floor((minP - 15) / 10) * 10);
     const hi = Math.ceil((maxP + 15) / 10) * 10;
     const plotW = W - PAD.left - PAD.right;
@@ -36,10 +60,18 @@ export function OptionPriceChart({ points, label }: { points: HistoryPoint[]; la
     const y = (price: number) =>
       PAD.top + (hi === lo ? plotH / 2 : (1 - (price - lo) / (hi - lo)) * plotH);
     const ticks = Array.from({ length: 5 }, (_, i) => Math.round(lo + ((hi - lo) * i) / 4));
-    // at most ~6 x labels, always including first and last readings
-    const step = Math.max(1, Math.ceil(pts.length / 6));
-    const xTicks = pts.filter((_, i) => i % step === 0 || i === pts.length - 1);
-    return { pts, x, y, ticks, xTicks };
+    // at most 4 x labels, evenly spaced (always including first and last) rather
+    // than a fixed step — a step-based pick can add a 5th "always include last"
+    // straggler; even spacing at 4 keeps labels from ever crowding closer than
+    // their own approximate width
+    const maxXLabels = 4;
+    const xTicks =
+      pts.length <= maxXLabels
+        ? pts
+        : Array.from({ length: maxXLabels }, (_, i) =>
+            pts[Math.round((i * (pts.length - 1)) / (maxXLabels - 1))],
+          ).filter((p, i, arr) => arr.findIndex((q) => q.scraped_at === p.scraped_at) === i);
+    return { pts, x, y, ticks, xTicks, cropped: lo > 0 };
   }, [points]);
 
   const ordered = useMemo(
@@ -94,7 +126,7 @@ export function OptionPriceChart({ points, label }: { points: HistoryPoint[]; la
                 </text>
               </g>
             ))}
-            {model.xTicks.map((p) => (
+            {model.xTicks.map((p, i) => (
               <text
                 key={p.scraped_at}
                 className="axis-label"
@@ -102,9 +134,27 @@ export function OptionPriceChart({ points, label }: { points: HistoryPoint[]; la
                 y={H - PAD.bottom + 16}
                 textAnchor="middle"
               >
-                {formatShortTimestamp(p.scraped_at)}
+                {formatXTick(p.scraped_at, i > 0 ? model.xTicks[i - 1].scraped_at : null)}
               </text>
             ))}
+            {model.cropped && (
+              // two short diagonal strokes just above the bottom gridline: the honesty
+              // cue that this y-axis is deliberately zoomed and doesn't start at zero
+              <g className="axis-break" aria-hidden="true">
+                <line
+                  x1={PAD.left - 6}
+                  y1={H - PAD.bottom - 1}
+                  x2={PAD.left + 2}
+                  y2={H - PAD.bottom - 11}
+                />
+                <line
+                  x1={PAD.left - 1}
+                  y1={H - PAD.bottom - 1}
+                  x2={PAD.left + 7}
+                  y2={H - PAD.bottom - 11}
+                />
+              </g>
+            )}
             <polyline
               className="series-line"
               points={model.pts.map((p) => `${model.x(p.scraped_at)},${model.y(p.price_usd)}`).join(' ')}
@@ -130,7 +180,7 @@ export function OptionPriceChart({ points, label }: { points: HistoryPoint[]; la
       </div>
 
       <details style={{ marginTop: '0.6rem' }}>
-        <summary className="muted" style={{ cursor: 'pointer', fontSize: '0.85rem' }}>
+        <summary className="muted" style={{ cursor: 'pointer', fontSize: '0.82rem' }}>
           View as data table
         </summary>
         <div className="chart-wrap" style={{ marginTop: '0.5rem' }}>

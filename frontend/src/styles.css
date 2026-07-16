@@ -14,8 +14,10 @@
   --surface: #f0efe7;
   --surface-2: #d5d2c6;
   --ink: #171b23;
-  --muted: #5a606c;
-  --faint: #888d97;
+  /* darkened from #5a606c: original failed 4.5:1 on --surface-2 (row hover) */
+  --muted: #54595f;
+  /* darkened from #888d97: original failed 4.5:1 on --surface */
+  --faint: #666b75;
   --rule: #c7c4b7;
   --rule-strong: #b0ad9f;
   --line: #171b23;
@@ -27,6 +29,16 @@
   --bad: #bd3325;
   --bad-tint: #eed8d3;
   --led-glow: 0 0 0 rgba(0, 0, 0, 0);
+
+  /* text color safe on a --signal background */
+  --on-signal: #ffffff;
+  /* darkened from #a83c0e: original failed 4.5:1 on --surface-2 (board row hover) */
+  --signal-text: #9a380e;
+  /* primary button surface, kept separate from --signal so button and accent hue can diverge */
+  --signal-btn: #a83c0e;
+  --signal-btn-hover: #8f350c;
+  /* darkened --bad: the raw --bad value fails 4.5:1 on --bad-tint */
+  --bad-text: #a82b1f;
 
   --maxw: 1160px;
 }
@@ -39,7 +51,8 @@
     --surface-2: #171d29;
     --ink: #e9eef6;
     --muted: #8a94a6;
-    --faint: #565f70;
+    /* nudged from #565f70 to clear 4.5:1 on --surface */
+    --faint: #7a8498;
     --rule: #1f2734;
     --rule-strong: #2f3948;
     --line: #2b3547;
@@ -51,6 +64,15 @@
     --bad: #ff5a4a;
     --bad-tint: #2a1512;
     --led-glow: 0 0 8px;
+
+    /* text color safe on a --signal background; reuses --paper's ink-inversion value */
+    --on-signal: #0a0d13;
+    /* amber is bright enough on the dark surface for small text (8:1+) */
+    --signal-text: #ff9d2b;
+    --signal-btn: #ff9d2b;
+    --signal-btn-hover: #ffb457;
+    /* --bad already clears 4.5:1 on --bad-tint in dark, so reuse it */
+    --bad-text: #ff5a4a;
   }
 }
 :root[data-theme='light'] {
@@ -58,8 +80,8 @@
   --surface: #f0efe7;
   --surface-2: #d5d2c6;
   --ink: #171b23;
-  --muted: #5a606c;
-  --faint: #888d97;
+  --muted: #54595f;
+  --faint: #666b75;
   --rule: #c7c4b7;
   --rule-strong: #b0ad9f;
   --line: #171b23;
@@ -71,6 +93,12 @@
   --bad: #bd3325;
   --bad-tint: #eed8d3;
   --led-glow: 0 0 0 rgba(0, 0, 0, 0);
+
+  --on-signal: #ffffff;
+  --signal-text: #9a380e;
+  --signal-btn: #a83c0e;
+  --signal-btn-hover: #8f350c;
+  --bad-text: #a82b1f;
 }
 :root[data-theme='dark'] {
   --paper: #0a0d13;
@@ -78,7 +106,7 @@
   --surface-2: #171d29;
   --ink: #e9eef6;
   --muted: #8a94a6;
-  --faint: #565f70;
+  --faint: #7a8498;
   --rule: #1f2734;
   --rule-strong: #2f3948;
   --line: #2b3547;
@@ -90,6 +118,12 @@
   --bad: #ff5a4a;
   --bad-tint: #2a1512;
   --led-glow: 0 0 8px;
+
+  --on-signal: #0a0d13;
+  --signal-text: #ff9d2b;
+  --signal-btn: #ff9d2b;
+  --signal-btn-hover: #ffb457;
+  --bad-text: #ff5a4a;
 }
 
 * {
@@ -117,6 +151,12 @@ h3 {
   letter-spacing: -0.02em;
   line-height: 1.05;
 }
+/* default section-heading size so any bare h2 (not just ones inside .section-head)
+   lands on the unified scale; .hero-route (h1) and .leg-card h3 set their own focal
+   sizes, and .state h2 is the one sanctioned larger exception (see its rule below) */
+h2 {
+  font-size: 1.1rem;
+}
 
 a {
   color: var(--ink);
@@ -130,17 +170,11 @@ a {
    not decorative — it names the datum beside it. */
 .field-label {
   font-family: var(--f-mono);
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);
-}
-/* 0.62rem renders under 10px; raise to the ~10.9px floor at phone widths */
-@media (max-width: 680px) {
-  .field-label {
-    font-size: 0.68rem;
-  }
 }
 
 .mono {
@@ -197,7 +231,7 @@ a {
 }
 .brand .route {
   font-family: var(--f-mono);
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--muted);
@@ -289,13 +323,21 @@ a {
   cursor: not-allowed;
 }
 .btn-primary {
-  background: var(--signal);
-  border-color: var(--signal);
-  color: #fff;
+  background: var(--signal-btn);
+  border-color: var(--signal-btn);
+  color: var(--on-signal);
 }
 .btn-primary:hover {
-  background: var(--signal-2);
-  border-color: var(--signal-2);
+  background: var(--signal-btn-hover);
+  border-color: var(--signal-btn-hover);
+}
+/* blanket 0.45 opacity on --signal-btn blends to ~2.2-2.8:1 against page background in
+   both themes; swap to an explicit muted surface instead of dimming the branded color */
+.btn-primary:disabled {
+  opacity: 1;
+  background: var(--surface-2);
+  border-color: var(--surface-2);
+  color: var(--muted);
 }
 .btn-ghost {
   border-color: transparent;
@@ -308,6 +350,19 @@ a {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+/* the Filters reset needs to read as a control at rest (unlike other ghost
+   buttons, which sit beside an obviously-primary action) — a subtle border,
+   dropped on hover/disabled so it doesn't fight .btn-ghost's own states */
+.btn-ghost.reset-btn {
+  border-color: var(--line);
+}
+.btn-ghost.reset-btn:hover {
+  text-decoration: none;
+  border-color: var(--ink);
+}
+.btn-ghost.reset-btn:disabled {
+  border-color: var(--rule);
+}
 
 label {
   font-size: 0.82rem;
@@ -319,6 +374,7 @@ input[type='email'],
 input[type='password'],
 input[type='number'],
 input[type='time'],
+input[type='date'],
 select {
   font: inherit;
   color: var(--ink);
@@ -334,7 +390,10 @@ input:focus,
 select:focus {
   border-color: var(--signal);
 }
-input:invalid {
+/* keyed on the form's own validation state (aria-invalid), not native mid-typing
+   :invalid — the email field only flags after the shared validator runs, not on
+   every keystroke the browser itself considers malformed. */
+input[aria-invalid='true'] {
   border-color: var(--bad);
 }
 .field {
@@ -347,7 +406,7 @@ input:invalid {
   color: var(--faint);
 }
 .field .error {
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   color: var(--bad);
   font-weight: 600;
 }
@@ -375,12 +434,12 @@ input:invalid {
   margin-bottom: 0.85rem;
 }
 .section-head h2 {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
 }
 .count {
   font-family: var(--f-mono);
   color: var(--faint);
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
 }
 .stack {
@@ -428,7 +487,7 @@ input:invalid {
 .hero .hero-route {
   font-family: var(--f-mono);
   font-weight: 600;
-  font-size: 1.15rem;
+  font-size: 1.4rem;
   letter-spacing: 0.02em;
 }
 .hero .hero-meta {
@@ -447,9 +506,9 @@ input:invalid {
 }
 .board thead th {
   font-family: var(--f-mono);
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);
   text-align: left;
@@ -464,7 +523,12 @@ input:invalid {
 .board tbody tr {
   transition: background 0.1s ease;
 }
-.board tbody tr:hover {
+/* hover + pointer only on rows that actually go somewhere — a dead row (no
+   detail href) shouldn't advertise an affordance it can't honor */
+.board tbody tr.rowlink {
+  cursor: pointer;
+}
+.board tbody tr.rowlink:hover {
   background: var(--surface-2);
 }
 .board tr.is-lowest td {
@@ -499,22 +563,16 @@ input:invalid {
 .flag {
   display: inline-block;
   font-family: var(--f-mono);
-  font-size: 0.58rem;
+  font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--signal);
+  color: var(--signal-text);
   border: 1px solid currentColor;
   padding: 0.05rem 0.35rem;
   border-radius: 2px;
   margin-left: 0.55rem;
   vertical-align: middle;
-}
-/* 0.58rem renders under 10px; raise to the ~10.9px floor at phone widths */
-@media (max-width: 680px) {
-  .flag {
-    font-size: 0.68rem;
-  }
 }
 .c-dates {
   white-space: nowrap;
@@ -527,7 +585,7 @@ input:invalid {
 }
 .c-flight .times {
   font-family: var(--f-mono);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   margin-top: 0.15rem;
@@ -535,9 +593,9 @@ input:invalid {
 .tag {
   display: inline-block;
   font-family: var(--f-mono);
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   padding: 0.08rem 0.4rem;
   border-radius: 2px;
@@ -550,48 +608,70 @@ input:invalid {
   color: var(--good);
   border-color: color-mix(in srgb, var(--good) 45%, transparent);
 }
-/* 0.62rem renders under 10px; raise to the ~10.9px floor at phone widths */
-@media (max-width: 680px) {
-  .tag {
-    font-size: 0.68rem;
-  }
-}
 .c-fare {
   text-align: right;
   white-space: nowrap;
 }
+/* price is now plain text (never an anchor) — Details/Book are separate,
+   explicit controls below it so the row's DOM contract is honest about
+   what's clickable */
 .c-fare .fare {
   font-family: var(--f-mono);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   font-size: 1.35rem;
   letter-spacing: -0.01em;
-  text-decoration: none;
   color: var(--ink);
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.5rem;
 }
 .is-lowest .c-fare .fare {
   color: var(--signal);
 }
-.c-fare .book {
-  font-family: var(--f-body);
-  font-size: 0.72rem;
+.fare-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+/* compact bordered button shared by the Details and Book row controls */
+.btn-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--f-mono);
+  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--signal);
-  border-bottom: 1px solid currentColor;
+  text-decoration: none;
+  white-space: nowrap;
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.3rem 0.55rem;
+  color: var(--ink);
+  background: var(--surface);
+  transition: border-color 0.12s ease, background 0.12s ease;
 }
-.c-fare a.fare:hover .book {
-  color: var(--signal-2);
+.btn-row:hover {
+  border-color: var(--ink);
 }
-.c-fare .book.dead {
-  color: var(--faint);
-  border: 0;
+/* signal-colored: --signal-text is pre-verified >=4.5:1 on paper/surface/
+   surface-2/signal-tint in both themes, which is every background this
+   button can sit on (default row, hover row, lowest-fare row) */
+.btn-row-signal {
+  color: var(--signal-text);
+  border-color: var(--signal-text);
+}
+.btn-row-signal:hover {
+  background: var(--signal-tint);
+}
+.btn-row.dead {
+  /* --faint fails 4.5:1 on the --surface-2 row-hover bg in light; --muted clears it everywhere */
+  color: var(--muted);
+  border-color: transparent;
+  background: transparent;
   text-transform: none;
   letter-spacing: 0;
+  cursor: default;
 }
 
 /* stacked board rows on small screens (classic responsive table) */
@@ -633,12 +713,20 @@ input:invalid {
   .c-fare {
     text-align: left;
   }
+  /* Details + Book sit side by side, full-width, under the fare — thumb
+     reach matters more than density at this width */
+  .fare-actions {
+    justify-content: flex-start;
+  }
+  .fare-actions .btn-row {
+    flex: 1;
+    justify-content: center;
+  }
   .board td[data-label]::before {
     content: attr(data-label);
     display: block;
     font-family: var(--f-mono);
-    /* 0.58rem renders under 10px; raise to the ~10.9px floor at phone widths */
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     font-weight: 600;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -667,17 +755,11 @@ input:invalid {
 }
 .status .word {
   font-family: var(--f-mono);
-  font-size: 0.66rem;
+  font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   flex: none;
-}
-/* 0.66rem renders under 10px; raise to the ~10.9px floor at phone widths */
-@media (max-width: 680px) {
-  .status .word {
-    font-size: 0.68rem;
-  }
 }
 .status.warn {
   border-left-color: var(--signal);
@@ -688,7 +770,7 @@ input:invalid {
   box-shadow: var(--led-glow) var(--signal);
 }
 .status.warn .word {
-  color: var(--signal);
+  color: var(--signal-text);
 }
 .status.bad {
   border-left-color: var(--bad);
@@ -700,7 +782,8 @@ input:invalid {
   animation: blink 1.4s steps(1) infinite;
 }
 .status.bad .word {
-  color: var(--bad);
+  /* raw --bad only clears ~4.2:1 on --bad-tint in light theme; --bad-text passes 4.5:1+ */
+  color: var(--bad-text);
 }
 @keyframes blink {
   50% {
@@ -740,19 +823,39 @@ input:invalid {
 .chart {
   display: block;
   width: 100%;
-  min-width: 440px;
+  /* viewBox is a fixed 760 units wide, so rendered size is capped at 1:1 (never
+     scaled up past the viewBox's own units) and floored low enough that a 375px
+     phone fits it without forcing chart-wrap's horizontal scroll. */
+  max-width: 760px;
+  min-width: 340px;
   height: auto;
+  /* center within chart-wrap once the wrap is wider than the chart's own cap */
+  margin: 0 auto;
 }
 .chart .grid-line {
   stroke: var(--rule);
   stroke-width: 1;
 }
+/* honesty cue for the deliberately-cropped y-domain: two short diagonal strokes
+   over the axis, just above the bottom (lowest-tick) gridline */
+.chart .axis-break line {
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
 .chart .axis-label {
-  fill: var(--faint);
-  /* viewBox units scale with render width; 14 stays legible at the 440px chart-wrap
-     minimum (~8px) without crowding date/price labels at desktop widths */
-  font-size: 14px;
+  fill: var(--muted);
+  /* text size in viewBox units tracks the chart's own render scale (renderedWidth /
+     760); the old 14px read ~15px at desktop's >1:1 stretch and ~8px once the 440px
+     floor forced overflow on phones. 11px keeps desktop (scale capped at 1.0) at a
+     legible 10-11px; phones no longer get the forced-wide floor that caused scroll. */
+  font-size: 11px;
   font-family: var(--f-mono);
+}
+/* below ~620px the chart renders at ~0.45-0.73 scale of its 760 viewbox (accounting for ~66-82px of page/panel padding), so ticks need 20px viewbox units to stay ≥8px rendered; above the threshold 11px renders ≥8px. */
+@media (max-width: 620px) {
+  .chart .axis-label {
+    font-size: 20px;
+  }
 }
 .series-toggles {
   display: flex;
@@ -763,9 +866,9 @@ input:invalid {
 .chip {
   appearance: none;
   font-family: var(--f-mono);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.12em;
   border: 1px solid var(--rule-strong);
   background: var(--surface);
   color: var(--muted);
@@ -784,20 +887,28 @@ input:invalid {
   color: var(--ink);
   border-color: currentColor;
 }
+/* opacity: 0.5 on the whole chip washed the label out below 3:1; keep the label
+   at full-strength --muted and hollow out the swatch instead so the off state
+   still reads as "off" without losing legibility */
 .chip[aria-pressed='false'] {
-  opacity: 0.5;
+  color: var(--muted);
+}
+.chip[aria-pressed='false'] .swatch {
+  background: transparent;
+  /* --line is only ~1.5:1 on dark --surface; --muted clears 3:1 UI-glyph floor in both themes */
+  border: 1px solid var(--muted);
 }
 
 /* data table (chart alt) */
 table.data {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
 }
 table.data caption {
   text-align: left;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   margin-bottom: 0.4rem;
 }
 table.data th,
@@ -825,11 +936,11 @@ table.data td.num {
 }
 .detail-link {
   font-family: var(--f-mono);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--signal);
+  color: var(--signal-text);
   text-decoration: none;
   border-bottom: 1px solid currentColor;
 }
@@ -842,7 +953,7 @@ table.data td.num {
 }
 .back-link {
   font-family: var(--f-mono);
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--muted);
   text-decoration: none;
@@ -860,8 +971,16 @@ table.data td.num {
     grid-template-columns: 1fr;
   }
 }
+/* the leg title ("Outbound"/"Return") becomes a mono micro-label, same treatment as
+   .field-label, so the 1.35rem times line below is unambiguously the card's focal
+   datum — mirrors the tiny-label-over-big-datum pattern the hero already uses */
 .leg-card h3 {
-  font-size: 1.05rem;
+  font-family: var(--f-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
 }
 .leg-times-line {
   font-size: 1.35rem;
@@ -882,9 +1001,9 @@ table.data td.num {
 }
 .leg-facts dt {
   font-family: var(--f-mono);
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);
 }
@@ -921,7 +1040,7 @@ table.data td.num {
   padding: 1.1rem 1.25rem;
 }
 .sparse-history .field-label {
-  color: var(--signal);
+  color: var(--signal-text);
 }
 .sparse-history p {
   margin: 0.4rem 0 0;
@@ -945,12 +1064,14 @@ table.data td.num {
 }
 .state .state-tag {
   font-family: var(--f-mono);
-  font-size: 0.66rem;
+  font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--signal);
+  color: var(--signal-text);
 }
+/* sanctioned exception to the unified 1.1rem h2: empty/error states need a bigger
+   focal headline, and this is scoped to .state so it never leaks into section heads */
 .state h2 {
   margin: 0.45rem 0 0.5rem;
   font-size: 1.5rem;
@@ -978,81 +1099,6 @@ table.data td.num {
   to {
     background-position: -200% 0;
   }
-}
-
-/* ── login: boarding pass ───────────────────────────────────────────────── */
-.login-wrap {
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  padding: 1.5rem;
-  background: var(--paper);
-}
-.pass {
-  width: 100%;
-  max-width: 420px;
-  display: grid;
-  grid-template-columns: 1fr;
-  background: var(--surface);
-  border: 2px solid var(--line);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.pass-stub {
-  background: var(--line);
-  color: var(--surface);
-  padding: 0.7rem 1.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-.pass-stub .brand {
-  color: var(--surface);
-}
-.pass-stub .brand svg {
-  color: var(--signal);
-}
-.pass-stub .gate {
-  font-family: var(--f-mono);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-}
-/* the tear line between stub and body */
-.pass-body {
-  padding: 1.6rem 1.5rem 1.75rem;
-  border-top: 2px dashed var(--rule-strong);
-  position: relative;
-}
-.pass-body::before,
-.pass-body::after {
-  content: '';
-  position: absolute;
-  top: -9px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--paper);
-  border: 2px solid var(--line);
-}
-.pass-body::before {
-  left: -9px;
-}
-.pass-body::after {
-  right: -9px;
-}
-.pass-body .row {
-  font-family: var(--f-mono);
-  font-size: 0.72rem;
-  color: var(--muted);
-  letter-spacing: 0.06em;
-  margin-bottom: 1.2rem;
-}
-.pass-body form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
 }
 
 /* ── settings ───────────────────────────────────────────────────────────── */
@@ -1148,11 +1194,15 @@ table.data td.num {
   padding: 0.35rem 0.75rem;
   cursor: pointer;
   font-family: var(--f-mono);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.12em;
   background: var(--surface);
   position: relative;
+  /* button-pill safety: strip native <button> chrome so it matches label pills */
+  appearance: none;
+  color: inherit;
+  line-height: inherit;
 }
 .choice input {
   position: absolute;
@@ -1160,13 +1210,24 @@ table.data td.num {
   width: 0;
   height: 0;
 }
-.choice:has(input:checked) {
+/* is-active mirrors :checked for <button> pills (the stops segmented control) */
+.choice:has(input:checked),
+.choice.is-active {
   border-color: var(--signal);
   background: var(--signal-tint);
   color: var(--signal-2);
 }
+/* the real checkbox is visually hidden (0 size, 0 opacity) so its own focus ring
+   never renders; mirror the global :focus-visible treatment onto the pill itself.
+   :has() is supported in all current evergreen browsers (no fallback needed). */
+.choice:has(input:focus-visible) {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
 :root[data-theme='dark'] .choice:has(input:checked),
-:root:not([data-theme='light']) .choice:has(input:checked) {
+:root[data-theme='dark'] .choice.is-active,
+:root:not([data-theme='light']) .choice:has(input:checked),
+:root:not([data-theme='light']) .choice.is-active {
   color: var(--signal-2);
 }
 
@@ -1192,12 +1253,14 @@ table.data td.num {
   bottom: 1.2rem;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--line);
-  color: var(--surface);
+  /* --line/--surface pairing gave ~1.3:1 in dark theme (both near-dark); invert on
+     --ink/--paper instead so it stays legible whichever theme is active */
+  background: var(--ink);
+  color: var(--paper);
   padding: 0.55rem 1rem;
   border-radius: 3px;
   font-family: var(--f-mono);
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   letter-spacing: 0.03em;
   z-index: 50;
 }
@@ -1210,6 +1273,9 @@ table.data td.num {
   .btn {
     min-height: 44px;
   }
+  .btn-row {
+    min-height: 44px;
+  }
   .chip {
     padding: 0.55rem 0.75rem;
   }
@@ -1218,28 +1284,80 @@ table.data td.num {
   }
   /* label has no display set (defaults to inline), so the added min-height sits below the text unless we center it */
   .choice {
-    min-height: 40px;
+    min-height: 44px;
     display: inline-flex;
     align-items: center;
   }
   /* inline text links: pad the tap area, then pull back with an equal negative margin so layout doesn't shift */
   .detail-link,
-  .back-link,
-  .book {
+  .back-link {
     display: inline-block;
     padding: 0.5rem 0;
     margin: -0.5rem 0;
-  }
-  /* later + equal specificity beats the base 0.3rem margin-top; keeps the offset, keeps the tap padding cancelled */
-  .c-flight .detail-link {
-    margin-top: -0.2rem;
   }
   input[type='text'],
   input[type='email'],
   input[type='password'],
   input[type='number'],
   input[type='time'],
+  input[type='date'],
   select {
     padding: 0.6rem 0.6rem;
   }
+}
+
+/* chart-wrap only ever wraps the chart/status block or the data table, so making
+   it a positioning context is safe for both uses — the flight card anchors to it. */
+.chart-wrap {
+  position: relative;
+}
+/* the hover/tap/focus flight card: pointer-inert so it can never steal the hover
+   that keeps it open, and positioned by its caller via inline left/top computed in JS
+   from measured geometry (see PriceGraph.tsx's useLayoutEffect). */
+.flight-card {
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;
+  max-width: 240px;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+.flight-card p {
+  margin: 0.15rem 0 0;
+}
+.flight-card p:first-child {
+  margin-top: 0;
+}
+.flight-card .fc-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-family: var(--f-mono);
+  font-weight: 600;
+}
+.flight-card .fc-meta {
+  color: var(--muted);
+}
+/* the hit circles are transparent, so a keyboard user needs a visible ring to
+   tell which point currently has focus. */
+.hit-target:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 1px;
+}
+
+/* PriceGraph's flight-card left/top are computed in JS from the card's real measured
+   width against chart-wrap's real width (see PriceGraph.tsx), which can only reposition
+   the card, not shrink it — so on very narrow chart-wrap boxes the flat 240px max-width
+   above could still be wider than the container itself. Cap it relative to the
+   containing block (chart-wrap, its positioned ancestor) so it can never be wider than
+   the box it must stay inside of, at any viewport down to 360px. Same specificity as the
+   earlier .flight-card rule; this one wins because it's declared later. */
+.flight-card {
+  max-width: min(240px, calc(100% - 16px));
 }

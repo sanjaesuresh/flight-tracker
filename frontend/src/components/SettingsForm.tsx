@@ -2,7 +2,10 @@
 // mirrors the poller's parse_settings, and Save is blocked while any error stands —
 // so the form can never persist a value the poller would reject. The server
 // re-normalizes on PUT as a final defense; this is the friendly first line.
-import { useMemo, useState } from 'react';
+// When `locked` (anonymous visitor), the editable sections sit in a disabled
+// fieldset and the Save bar is swapped for a small password prompt that logs in
+// in place — no navigation, no full-screen wall.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider.tsx';
 import { api, ApiError } from '../lib/api.js';
 import type { Settings, SettingsInput } from '../lib/types.js';
@@ -68,13 +71,31 @@ function NumberField({
   );
 }
 
-export function SettingsForm({ initial }: { initial: Settings }) {
-  const { markLoggedOut } = useAuth();
+export function SettingsForm({
+  initial,
+  locked = false,
+}: {
+  initial: Settings;
+  locked?: boolean;
+}) {
+  const { login, markLoggedOut } = useAuth();
   const [saved, setSaved] = useState<Settings>(initial);
   const [draft, setDraft] = useState<SettingsInput>(toInput(initial));
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [unlockPassword, setUnlockPassword] = useState('');
+  const [unlocking, setUnlocking] = useState(false);
+  const [unlockError, setUnlockError] = useState<string | null>(null);
+  // tracks the pending "clear toast" timeout so it can be cancelled if the
+  // component unmounts (e.g. navigating away) before the 3.2s delay elapses.
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   const errors = useMemo(() => validateForm(draft), [draft]);
   const invalid = hasErrors(errors);
@@ -107,7 +128,9 @@ export function SettingsForm({ initial }: { initial: Settings }) {
       setSaved(result);
       setDraft(toInput(result));
       setToast('Settings saved. The next poll will use them.');
-      setTimeout(() => setToast(null), 3200);
+      // clear any prior pending timer first — back-to-back saves shouldn't leak timers
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 3200);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         markLoggedOut();
@@ -116,6 +139,26 @@ export function SettingsForm({ initial }: { initial: Settings }) {
       setSaveError('Could not save. Please try again.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onUnlock(e: React.FormEvent) {
+    e.preventDefault();
+    setUnlockError(null);
+    setUnlocking(true);
+    try {
+      await login(unlockPassword);
+      // AuthProvider flips status to 'authenticated'; the settings page reloads
+      // with the real email and remounts this form via its lock-state key.
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        // same non-leaky wording the old full-screen login used
+        setUnlockError('That password is not right.');
+      } else {
+        setUnlockError('Could not sign in. Please try again.');
+      }
+    } finally {
+      setUnlocking(false);
     }
   }
 
@@ -128,6 +171,9 @@ export function SettingsForm({ initial }: { initial: Settings }) {
         </span>
       </div>
 
+      {/* one fieldset disables every editable control at once when locked; the
+          unlock prompt below stays outside it so it's never disabled by itself */}
+      <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0 }}>
       <section className="panel form-section" aria-labelledby="airports-h">
         <h3 id="airports-h">Airports</h3>
         <p className="hint" style={{ margin: '0.2rem 0 0.9rem' }}>
@@ -136,9 +182,7 @@ export function SettingsForm({ initial }: { initial: Settings }) {
         </p>
         <div className="form-grid">
           <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-            <legend style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 560 }}>
-              Origins (NYC)
-            </legend>
+            <legend className="legend-label">Origins (NYC)</legend>
             <div className="choice-set">
               {FIXED_ORIGINS.map((code) => (
                 <label className="choice" key={code}>
@@ -159,9 +203,7 @@ export function SettingsForm({ initial }: { initial: Settings }) {
           </fieldset>
 
           <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-            <legend style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 560 }}>
-              Destinations (Toronto)
-            </legend>
+            <legend className="legend-label">Destinations (Toronto)</legend>
             <div className="choice-set">
               {FIXED_DESTINATIONS.map((code) => (
                 <label className="choice" key={code}>
@@ -329,22 +371,50 @@ export function SettingsForm({ initial }: { initial: Settings }) {
         </div>
       </section>
 
-      <div className="save-bar">
-        <button
-          className="btn btn-primary"
-          onClick={() => void onSave()}
-          disabled={saving || invalid || !dirty}
-        >
-          {saving ? 'Saving…' : 'Save settings'}
-        </button>
-        {invalid && <span className="muted">Fix the highlighted fields to save.</span>}
-        {!invalid && !dirty && <span className="muted">No unsaved changes.</span>}
-        {saveError && (
-          <span className="error" role="alert">
-            {saveError}
-          </span>
-        )}
-      </div>
+      {!locked && (
+        <div className="save-bar">
+          <button
+            className="btn btn-primary"
+            onClick={() => void onSave()}
+            disabled={saving || invalid || !dirty}
+          >
+            {saving ? 'Saving…' : 'Save settings'}
+          </button>
+          {invalid && <span className="muted">Fix the highlighted fields to save.</span>}
+          {!invalid && !dirty && <span className="muted">No unsaved changes.</span>}
+          {saveError && (
+            <span className="error" role="alert">
+              {saveError}
+            </span>
+          )}
+        </div>
+      )}
+      </fieldset>
+
+      {locked && (
+        <form className="save-bar" onSubmit={onUnlock}>
+          <div className="field" style={{ margin: 0 }}>
+            <label htmlFor="unlock-pw">Password</label>
+            <input
+              id="unlock-pw"
+              type="password"
+              autoComplete="current-password"
+              value={unlockPassword}
+              onChange={(e) => setUnlockPassword(e.target.value)}
+              aria-invalid={unlockError ? true : undefined}
+              aria-describedby={unlockError ? 'unlock-pw-err' : undefined}
+            />
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={unlocking || !unlockPassword}>
+            {unlocking ? 'Unlocking…' : 'Unlock to edit'}
+          </button>
+          {unlockError && (
+            <span className="error" id="unlock-pw-err" role="alert">
+              {unlockError}
+            </span>
+          )}
+        </form>
+      )}
 
       {toast && (
         <div className="toast" role="status">

@@ -89,4 +89,32 @@ describe('SettingsForm', () => {
     expect(await screen.findByText(/outbound window end is before/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /save settings/i })).toBeDisabled();
   });
+
+  it('only flags the email field once the validator rejects it, not before', async () => {
+    renderForm();
+    const email = screen.getByLabelText(/alert email/i);
+    // empty (unset) is valid — optional field — so no error styling yet
+    expect(email).not.toHaveAttribute('aria-invalid');
+    await userEvent.type(email, 'not-an-email');
+    // the shared validator (not native mid-typing :invalid) is what flags it
+    expect(await screen.findByText(/valid email address/i)).toBeInTheDocument();
+    expect(email).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('clears the pending toast timer on unmount instead of leaking it', async () => {
+    // React 18 no longer warns on a post-unmount setState, so assert the cleanup
+    // directly: the timer id returned by the save's setTimeout must reach clearTimeout.
+    const clearSpy = vi.spyOn(window, 'clearTimeout');
+    (api.putSettings as ReturnType<typeof vi.fn>).mockResolvedValue({ ...base });
+    const { unmount } = renderForm();
+    // save is disabled while the draft matches the saved settings, so dirty it first
+    await userEvent.click(screen.getByRole('checkbox', { name: /dry run/i }));
+    await userEvent.click(screen.getByRole('button', { name: /save settings/i }));
+    const toastEl = await screen.findByRole('status');
+    expect(toastEl).toHaveTextContent(/settings saved/i);
+    clearSpy.mockClear();
+    unmount();
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
+  });
 });

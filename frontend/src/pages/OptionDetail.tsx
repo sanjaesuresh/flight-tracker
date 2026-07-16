@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider.tsx';
 import { api, ApiError } from '../lib/api.js';
-import type { OptionParams } from '../lib/route.js';
+import { cameFromBoard, type OptionParams } from '../lib/route.js';
 import type { OptionHistoryPayload, PriceSnapshot } from '../lib/types.js';
 import { historyStats } from '../lib/filter.js';
 import { formatFlightDate, formatTimeOfDay, formatTimestamp } from '../lib/timezone.js';
@@ -125,7 +125,19 @@ export function OptionDetail({ params }: { params: OptionParams }) {
   return (
     <div className="stack">
       <nav aria-label="Breadcrumb">
-        <a className="back-link" href="#/">
+        {/* real history.back() restores the board's scroll position; the href stays
+            so middle-click/open-in-new-tab still work, and deep links fall through to it */}
+        <a
+          className="back-link"
+          href="#/"
+          onClick={(e) => {
+            // modified clicks must keep native open-in-new-tab behavior
+            if (cameFromBoard() && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+              e.preventDefault();
+              window.history.back();
+            }
+          }}
+        >
           ← Back to the board
         </a>
       </nav>
@@ -220,7 +232,7 @@ export function OptionDetail({ params }: { params: OptionParams }) {
         <OptionPriceChart points={data.points} label={label} />
 
         {first && (
-          <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.7rem' }}>
+          <p className="muted" style={{ fontSize: '0.75rem', marginTop: '0.7rem' }}>
             Tracked since {formatTimestamp(first.scraped_at)}. Times shown are each airport’s
             local wall-clock values; prices in USD.
           </p>

@@ -85,6 +85,8 @@ export interface RankedOption extends PriceSnapshot {
 export interface GraphPoint {
   outbound_date: string;
   price_usd: number;
+  // the snapshot that produced the minimum, so the graph can describe the flight
+  flight: PriceSnapshot;
 }
 
 // One toggleable series on the graph, keyed by O-D pair.
@@ -116,9 +118,14 @@ export interface OptionHistoryPayload {
 // Filter state driving the pure filter function (times are "HH:MM" NY local).
 export interface FilterState {
   airlines: string[]; // empty = all
-  maxStops: number | null; // null = any; 0 = non-stop only
+  stops: number | null; // null = any; 0/1 = exactly that many stops; 2 = 2 or more
   priceMin: number | null;
   priceMax: number | null;
+  // outbound/return travel-date windows ("YYYY-MM-DD", inclusive; null = unbounded).
+  outboundDateFrom: string | null;
+  outboundDateTo: string | null;
+  returnDateFrom: string | null;
+  returnDateTo: string | null;
   outboundDepFrom: string | null;
   outboundDepTo: string | null;
   outboundArrFrom: string | null;

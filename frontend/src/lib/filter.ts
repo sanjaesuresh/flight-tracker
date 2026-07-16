@@ -63,12 +63,21 @@ export function applyFilters(snapshots: PriceSnapshot[], f: FilterState): PriceS
       const carriers = snapshotAirlines(s);
       if (!f.airlines.some((a) => carriers.includes(a))) return false;
     }
-    if (f.maxStops !== null) {
-      // unknown stop count passes a bounded stops filter (never hidden).
-      if (s.stops !== null && s.stops > f.maxStops) return false;
+    if (f.stops !== null) {
+      // unknown stop count passes a bounded stops filter (never hidden). 2 is the
+      // "2 or more" bucket; 0 and 1 match exactly.
+      if (s.stops !== null) {
+        if (f.stops === 2 ? s.stops < 2 : s.stops !== f.stops) return false;
+      }
     }
     if (f.priceMin !== null && s.price_usd < f.priceMin) return false;
     if (f.priceMax !== null && s.price_usd > f.priceMax) return false;
+    // travel-date windows: outbound_date/return_date are non-null "YYYY-MM-DD",
+    // which sort lexicographically, so string compare is a correct date compare.
+    if (f.outboundDateFrom && s.outbound_date < f.outboundDateFrom) return false;
+    if (f.outboundDateTo && s.outbound_date > f.outboundDateTo) return false;
+    if (f.returnDateFrom && s.return_date < f.returnDateFrom) return false;
+    if (f.returnDateTo && s.return_date > f.returnDateTo) return false;
     if (!withinWindow(s.outbound_dep_time, f.outboundDepFrom, f.outboundDepTo)) return false;
     if (!withinWindow(s.outbound_arr_time, f.outboundArrFrom, f.outboundArrTo)) return false;
     if (!withinWindow(s.return_dep_time, f.returnDepFrom, f.returnDepTo)) return false;
@@ -85,7 +94,7 @@ export function odKey(origin: string, destination: string): string {
 // Derived from whatever snapshots are passed in (already filtered), so the graph,
 // list, and filters stay in sync.
 export function buildSeries(snapshots: PriceSnapshot[]): GraphSeries[] {
-  const byOd = new Map<string, Map<string, number>>();
+  const byOd = new Map<string, Map<string, PriceSnapshot>>();
   for (const s of snapshots) {
     const key = odKey(s.origin, s.destination);
     let dateMap = byOd.get(key);
@@ -94,13 +103,21 @@ export function buildSeries(snapshots: PriceSnapshot[]): GraphSeries[] {
       byOd.set(key, dateMap);
     }
     const prev = dateMap.get(s.outbound_date);
-    if (prev === undefined || s.price_usd < prev) dateMap.set(s.outbound_date, s.price_usd);
+    // keep the whole snapshot (not just its price) so the graph can describe the
+    // winning flight; ties break on scraped_at, ISO strings compare correctly as strings.
+    if (
+      prev === undefined ||
+      s.price_usd < prev.price_usd ||
+      (s.price_usd === prev.price_usd && s.scraped_at > prev.scraped_at)
+    ) {
+      dateMap.set(s.outbound_date, s);
+    }
   }
   const series: GraphSeries[] = [];
   for (const [key, dateMap] of byOd) {
     const [origin, destination] = key.split('-');
     const points = [...dateMap.entries()]
-      .map(([outbound_date, price_usd]) => ({ outbound_date, price_usd }))
+      .map(([outbound_date, flight]) => ({ outbound_date, price_usd: flight.price_usd, flight }))
       .sort((a, b) => a.outbound_date.localeCompare(b.outbound_date));
     series.push({ key, origin, destination, points });
   }
@@ -158,9 +175,13 @@ export function historyStats(points: HistoryPoint[]): HistoryStats | null {
 export function emptyFilter(): FilterState {
   return {
     airlines: [],
-    maxStops: null,
+    stops: null,
     priceMin: null,
     priceMax: null,
+    outboundDateFrom: null,
+    outboundDateTo: null,
+    returnDateFrom: null,
+    returnDateTo: null,
     outboundDepFrom: null,
     outboundDepTo: null,
     outboundArrFrom: null,
@@ -170,4 +191,10 @@ export function emptyFilter(): FilterState {
     returnArrFrom: null,
     returnArrTo: null,
   };
+}
+
+// every field is a primitive or an array that's only ever [] when unset, so a
+// JSON-string compare against the canonical empty state is an exact equality check.
+export function isEmptyFilter(f: FilterState): boolean {
+  return JSON.stringify(f) === JSON.stringify(emptyFilter());
 }

@@ -3,13 +3,20 @@
 // the filter deliberately keeps unknown times, that behavior is stated inline so a
 // bounded return-time window never looks like it "lost" flights.
 import type { FilterState } from '../lib/types.js';
-import { emptyFilter } from '../lib/filter.js';
+import { emptyFilter, isEmptyFilter } from '../lib/filter.js';
 
 interface Props {
   filter: FilterState;
   onChange: (next: FilterState) => void;
   airlines: string[];
 }
+
+// Exact stop buckets: 0 and 1 match precisely, 2 is the "2 or more" bucket.
+const STOP_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: '0' },
+  { value: 1, label: '1' },
+  { value: 2, label: '2+' },
+];
 
 function TimeRange({
   label,
@@ -26,9 +33,7 @@ function TimeRange({
 }) {
   return (
     <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-      <legend className="label" style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
-        {label}
-      </legend>
+      <legend className="legend-label">{label}</legend>
       <div className="leg-times">
         <input
           type="time"
@@ -38,6 +43,41 @@ function TimeRange({
         />
         <input
           type="time"
+          aria-label={`${label} to`}
+          value={to ?? ''}
+          onChange={(e) => onTo(e.target.value || null)}
+        />
+      </div>
+    </fieldset>
+  );
+}
+
+// A pair of native date inputs bounding an inclusive travel-date window.
+function DateRange({
+  label,
+  from,
+  to,
+  onFrom,
+  onTo,
+}: {
+  label: string;
+  from: string | null;
+  to: string | null;
+  onFrom: (v: string | null) => void;
+  onTo: (v: string | null) => void;
+}) {
+  return (
+    <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+      <legend className="legend-label">{label}</legend>
+      <div className="leg-times">
+        <input
+          type="date"
+          aria-label={`${label} from`}
+          value={from ?? ''}
+          onChange={(e) => onFrom(e.target.value || null)}
+        />
+        <input
+          type="date"
           aria-label={`${label} to`}
           value={to ?? ''}
           onChange={(e) => onTo(e.target.value || null)}
@@ -59,8 +99,12 @@ export function Filters({ filter, onChange, airlines }: Props) {
     <aside className="sidebar">
       <div className="panel form-section">
         <div className="row-between" style={{ marginBottom: '0.9rem' }}>
-          <h2 style={{ fontSize: '1rem' }}>Filters</h2>
-          <button className="btn btn-ghost" onClick={() => onChange(emptyFilter())}>
+          <h2>Filters</h2>
+          <button
+            className="btn btn-ghost reset-btn"
+            onClick={() => onChange(emptyFilter())}
+            disabled={isEmptyFilter(filter)}
+          >
             Reset
           </button>
         </div>
@@ -68,12 +112,10 @@ export function Filters({ filter, onChange, airlines }: Props) {
         <div className="stack" style={{ gap: '1rem' }}>
           {airlines.length > 0 && (
             <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-              <legend className="label" style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
-                Airline
-              </legend>
+              <legend className="legend-label">Airline</legend>
               <div className="choice-set">
                 {airlines.map((a) => (
-                  <label className="choice" key={a} style={{ fontFamily: 'var(--font-sans)' }}>
+                  <label className="choice" key={a} style={{ fontFamily: 'var(--f-body)' }}>
                     <input
                       type="checkbox"
                       checked={filter.airlines.includes(a)}
@@ -86,26 +128,29 @@ export function Filters({ filter, onChange, airlines }: Props) {
             </fieldset>
           )}
 
-          <div className="field">
-            <label htmlFor="stops">Stops</label>
-            <select
-              id="stops"
-              value={filter.maxStops === null ? 'any' : String(filter.maxStops)}
-              onChange={(e) =>
-                set({ maxStops: e.target.value === 'any' ? null : Number(e.target.value) })
-              }
-            >
-              <option value="any">Any</option>
-              <option value="0">Non-stop only</option>
-              <option value="1">1 stop or fewer</option>
-              <option value="2">2 stops or fewer</option>
-            </select>
-          </div>
+          <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="legend-label">Stops</legend>
+            <div className="choice-set">
+              {STOP_OPTIONS.map((opt) => {
+                const active = filter.stops === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={active ? 'choice is-active' : 'choice'}
+                    aria-pressed={active}
+                    // clicking the active bucket again clears back to Any
+                    onClick={() => set({ stops: active ? null : opt.value })}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
 
           <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-            <legend className="label" style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
-              Price (USD)
-            </legend>
+            <legend className="legend-label">Price (USD)</legend>
             <div className="leg-times">
               <input
                 type="number"
@@ -127,6 +172,21 @@ export function Filters({ filter, onChange, airlines }: Props) {
               />
             </div>
           </fieldset>
+
+          <DateRange
+            label="Outbound date"
+            from={filter.outboundDateFrom}
+            to={filter.outboundDateTo}
+            onFrom={(v) => set({ outboundDateFrom: v })}
+            onTo={(v) => set({ outboundDateTo: v })}
+          />
+          <DateRange
+            label="Return date"
+            from={filter.returnDateFrom}
+            to={filter.returnDateTo}
+            onFrom={(v) => set({ returnDateFrom: v })}
+            onTo={(v) => set({ returnDateTo: v })}
+          />
 
           <TimeRange
             label="Outbound departs"
