@@ -37,3 +37,9 @@ spike_fixture.json
 
 # OS
 .DS_Store
+
+# local agent/tool state
+.claude/
+
+# stray root-level node_modules (frontend has its own ignore)
+node_modules/
