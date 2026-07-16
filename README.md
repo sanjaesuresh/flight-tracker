@@ -181,7 +181,7 @@ password. It requires 2-factor authentication to be enabled on the account.
 | Variable         | Purpose                                                                          |
 | ---------------- | ------------------------------------------------------------------------------- |
 | `DATABASE_URL`   | Same Neon connection string (used server-side only)                             |
-| `APP_PASSWORD`   | The single password for dashboard login                                         |
+| `APP_PASSWORD`   | The single password required to edit settings (the dashboard itself is public)  |
 | `SESSION_SECRET` | Optional; HMAC key for the session cookie (derived from `APP_PASSWORD` if unset) |
 
 Vercel project settings:

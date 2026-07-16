@@ -1,4 +1,4 @@
-// /api/option-history: auth-gated like every data route, returns one option's
+// /api/option-history: public like the other read routes, returns one option's
 // newest full row plus its own hourly (scraped_at, price_usd) series — proven
 // against the real PGlite schema + seed, same as the other server tests.
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -72,14 +72,17 @@ describe('/api/option-history', () => {
     process.env.NODE_ENV = 'test';
   });
 
-  it('rejects unauthenticated reads', async () => {
+  it('serves the option and its series publicly, with no cookie', async () => {
     const db = await createPgliteDb('normal');
     const id = await seededIdentity(db, 2);
     const res = await dispatch(
       req({ path: '/api/option-history', method: 'GET', query: query(id) }),
       db,
     );
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+    const payload = res.json as OptionHistoryPayload;
+    expect(payload.option.itinerary_key).toBe(id.itinerary_key);
+    expect(payload.points.length).toBeGreaterThan(0);
   });
 
   it('returns the option row and its ascending hourly series', async () => {

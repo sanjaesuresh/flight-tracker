@@ -17,8 +17,11 @@ read-mostly window onto `price_snapshots` plus a validated writer of the single
   `@neondatabase/serverless` HTTP driver. There is no RLS; the API is the
   authorization boundary.
 - **Auth** — one password (`APP_PASSWORD`), checked constant-time, exchanged for a
-  signed **httpOnly** session cookie. Every data route rejects unauthenticated
-  requests.
+  signed **httpOnly** session cookie. The dashboard itself is public: reads
+  (snapshots, option history, health, settings) answer anonymously. Only saving
+  settings requires the password; an anonymous settings read also gets
+  `alert_email` blanked to `null` so the notification address is never exposed
+  without the password.
 - **One codebase, three runtimes** — the core handlers are framework-free
   (`src/server/*`). They run under Vercel (Neon), under `vite dev` (an in-process
   PGlite seeded from `../db/schema.sql`), and under Vitest — with no duplication.
@@ -36,7 +39,8 @@ npm install
 APP_PASSWORD=devpass npm run dev
 ```
 
-Open the printed URL and sign in with the password you set. Local dev serves the
+Open the printed URL — the dashboard renders straight away. The Settings tab is
+visible but locked; enter the password there to edit. Local dev serves the
 `/api/*` routes from an in-process PGlite database seeded with synthetic data, so
 you can see every screen without touching Neon.
 
@@ -86,6 +90,12 @@ catch-all), but the included config targets Vercel.
 - `DATABASE_URL` / `APP_PASSWORD` are **server-side only**. The client bundle is
   grep-checked in CI-style verification to contain no connection string, secret env
   name, or server module. The repo is public — never commit real secret values.
+- The dashboard is public and settings editing is password-gated: anyone with the
+  URL can see fares, history, health, and the settings screen (read-only); only a
+  valid session cookie can save changes via `PUT /api/settings`.
+- The notification email (`alert_email`) is redacted to `null` on an anonymous
+  settings read and only returned to an authenticated session — it's the one
+  personal field in `settings`, so it's the only one redacted.
 - All settings writes go through the same validator the poller uses
   (`src/lib/settingsSchema.ts`, mirroring `poller/db.py:parse_settings`), on both the
   form and the server, so the form can never persist a value the poller would reject.
@@ -113,7 +123,7 @@ rather than being grouped in a separate mobile section.
 api/[...path].ts        Vercel serverless entry (Neon HTTP driver)
 src/server/             framework-free handlers, router, auth, http, pglite (dev/test)
 src/lib/                types, timezone, settings contract, filter, api client, health
-src/auth/               AuthProvider + login screen
+src/auth/               AuthProvider (settings-unlock prompt lives in SettingsForm)
 src/components/         CheapestList, PriceGraph, Filters, SettingsForm, PatternEditor, state/
 src/pages/              Dashboard, Settings
 ```

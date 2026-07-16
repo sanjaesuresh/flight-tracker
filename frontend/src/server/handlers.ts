@@ -44,7 +44,7 @@ export async function session(ctx: ApiRequest): Promise<ApiResponse> {
   return { status: 200, json: { authenticated: isAuthenticated(ctx, nowSeconds()) } };
 }
 
-// ---- data routes (session required) ----
+// ---- data routes (public; only put-settings still requires a session) ----
 
 const SNAPSHOT_COLS = `
   to_char(scraped_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') as scraped_at,
@@ -75,8 +75,7 @@ const NEWEST_SQL = `
   SELECT to_char(max(scraped_at) at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') as newest
   FROM price_snapshots`;
 
-export async function snapshots(ctx: ApiRequest, db: Db): Promise<ApiResponse> {
-  if (!isAuthenticated(ctx, nowSeconds())) return UNAUTHORIZED;
+export async function snapshots(_ctx: ApiRequest, db: Db): Promise<ApiResponse> {
   const settings = await readSettingsRow(db);
   const latest = (await db.query<PriceSnapshot>(LATEST_SQL, [settings.window_days])) as PriceSnapshot[];
   const newestRows = await db.query<{ newest: string | null }>(NEWEST_SQL);
@@ -117,7 +116,6 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const AIRPORT_RE = /^[A-Z]{3}$/;
 
 export async function optionHistory(ctx: ApiRequest, db: Db): Promise<ApiResponse> {
-  if (!isAuthenticated(ctx, nowSeconds())) return UNAUTHORIZED;
   const origin = ctx.query.get('origin') ?? '';
   const destination = ctx.query.get('destination') ?? '';
   const outboundDate = ctx.query.get('outbound_date') ?? '';
@@ -151,8 +149,7 @@ const HEALTH_SQL = `
     consecutive_failures
   FROM poller_state WHERE id = 1`;
 
-export async function health(ctx: ApiRequest, db: Db): Promise<ApiResponse> {
-  if (!isAuthenticated(ctx, nowSeconds())) return UNAUTHORIZED;
+export async function health(_ctx: ApiRequest, db: Db): Promise<ApiResponse> {
   const rows = await db.query<{ last_success: string | null; consecutive_failures: number }>(
     HEALTH_SQL,
   );
@@ -219,8 +216,13 @@ async function readSettingsRow(db: Db): Promise<Settings> {
 }
 
 export async function getSettings(ctx: ApiRequest, db: Db): Promise<ApiResponse> {
-  if (!isAuthenticated(ctx, nowSeconds())) return UNAUTHORIZED;
-  return { status: 200, json: await readSettingsRow(db) };
+  const settings = await readSettingsRow(db);
+  // the notification email is the only field with anything personal in it, so it
+  // is the only thing redacted from an anonymous read; everything else is public
+  if (!isAuthenticated(ctx, nowSeconds())) {
+    return { status: 200, json: { ...settings, alert_email: null } };
+  }
+  return { status: 200, json: settings };
 }
 
 // text[] and jsonb are passed as literal strings with explicit casts so the Neon

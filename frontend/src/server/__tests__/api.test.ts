@@ -33,10 +33,75 @@ describe('api server path', () => {
     process.env.NODE_ENV = 'test';
   });
 
-  it('rejects unauthenticated data reads', async () => {
+  it('serves the four read routes anonymously (no cookie)', async () => {
     const db = await createPgliteDb('normal');
-    const res = await dispatch(req({ path: '/api/snapshots', method: 'GET' }), db);
+    expect((await dispatch(req({ path: '/api/snapshots', method: 'GET' }), db)).status).toBe(200);
+    expect((await dispatch(req({ path: '/api/health', method: 'GET' }), db)).status).toBe(200);
+    expect((await dispatch(req({ path: '/api/settings', method: 'GET' }), db)).status).toBe(200);
+
+    // option-history needs a real identity's query params to reach 200 rather
+    // than the 400 (invalid_params) an empty query gets — same identity lookup
+    // as optionHistory.test.ts.
+    const [row] = await db.query<{
+      itinerary_key: string;
+      origin: string;
+      destination: string;
+      outbound_date: string;
+      return_date: string;
+    }>(
+      `SELECT itinerary_key, origin, destination,
+              to_char(outbound_date,'YYYY-MM-DD') as outbound_date,
+              to_char(return_date,'YYYY-MM-DD') as return_date
+       FROM price_snapshots WHERE itinerary_key IS NOT NULL LIMIT 1`,
+    );
+    const query = new URLSearchParams({
+      origin: row.origin,
+      destination: row.destination,
+      outbound_date: row.outbound_date,
+      return_date: row.return_date,
+      itinerary_key: row.itinerary_key,
+    });
+    const historyRes = await dispatch(
+      req({ path: '/api/option-history', method: 'GET', query }),
+      db,
+    );
+    expect(historyRes.status).toBe(200);
+  });
+
+  it('rejects an anonymous settings write', async () => {
+    const db = await createPgliteDb('normal');
+    const res = await dispatch(req({ path: '/api/settings', method: 'PUT', body: {} }), db);
     expect(res.status).toBe(401);
+  });
+
+  it('redacts alert_email for an anonymous settings read, reveals it once authenticated', async () => {
+    const db = await createPgliteDb('normal');
+    const cookies = await loginCookie(db);
+
+    // set a real email via an authenticated write first
+    const before = (await dispatch(req({ path: '/api/settings', method: 'GET', cookies }), db))
+      .json as Settings;
+    const written = await dispatch(
+      req({
+        path: '/api/settings',
+        method: 'PUT',
+        cookies,
+        body: { ...before, alert_email: 'me@example.com' },
+      }),
+      db,
+    );
+    expect((written.json as Settings).alert_email).toBe('me@example.com');
+
+    // anonymous read of the same row: every field is public except the email
+    const anon = await dispatch(req({ path: '/api/settings', method: 'GET' }), db);
+    expect(anon.status).toBe(200);
+    const anonSettings = anon.json as Settings;
+    expect(anonSettings.alert_email).toBeNull();
+    expect(anonSettings.threshold_usd).toBe(before.threshold_usd);
+
+    // authenticated read reveals the real value
+    const authed = await dispatch(req({ path: '/api/settings', method: 'GET', cookies }), db);
+    expect((authed.json as Settings).alert_email).toBe('me@example.com');
   });
 
   it('rejects a wrong password', async () => {
