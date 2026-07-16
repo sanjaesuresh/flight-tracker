@@ -90,6 +90,23 @@ catch-all), but the included config targets Vercel.
   (`src/lib/settingsSchema.ts`, mirroring `poller/db.py:parse_settings`), on both the
   form and the server, so the form can never persist a value the poller would reject.
 
+## Responsive behavior
+
+Breakpoints in use (`src/styles.css`):
+
+- `860px` — dashboard grid + sidebar collapse to one column.
+- `680px` — topbar goes compact, the board table stacks to cards, and a
+  spacing/min-text pass tightens the mobile blocks.
+- `640px` — settings form grid collapses.
+- `560px` — pattern editor legs stack.
+- `420px` — paired time inputs stack.
+- `(pointer: coarse)` — a 44px touch-target block enlarges tappable controls
+  (also applies at small widths regardless of pointer type).
+
+Convention: rules are written desktop-first; each `max-width` media query
+override lives directly next to the rule(s) it overrides in `src/styles.css`,
+rather than being grouped in a separate mobile section.
+
 ## Layout
 
 ```

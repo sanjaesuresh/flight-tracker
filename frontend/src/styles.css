@@ -136,6 +136,12 @@ a {
   text-transform: uppercase;
   color: var(--faint);
 }
+/* 0.62rem renders under 10px; raise to the ~10.9px floor at phone widths */
+@media (max-width: 680px) {
+  .field-label {
+    font-size: 0.68rem;
+  }
+}
 
 .mono {
   font-family: var(--f-mono);
@@ -167,9 +173,13 @@ a {
   max-width: var(--maxw);
   margin: 0 auto;
   padding: 0.75rem 1.25rem;
+  /* viewport-fit=cover goes edge-to-edge, so clear the landscape notch/rounded corner */
+  padding-left: max(1.25rem, env(safe-area-inset-left));
+  padding-right: max(1.25rem, env(safe-area-inset-right));
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex-wrap: wrap; /* safety net: drop nav to a second row instead of overflowing */
 }
 
 .brand {
@@ -224,12 +234,38 @@ a {
   color: var(--ink);
 }
 
+/* below 680px: hide the wordmark and compact the row so logo + route badge + nav fit */
+@media (max-width: 680px) {
+  .brand-name {
+    display: none;
+  }
+  .topbar-inner {
+    padding: 0.6rem 1rem;
+    /* viewport-fit=cover goes edge-to-edge, so clear the landscape notch/rounded corner */
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    gap: 0.5rem;
+  }
+}
+
 .main {
   flex: 1;
   width: 100%;
   max-width: var(--maxw);
   margin: 0 auto;
   padding: 1.5rem 1.25rem 4rem;
+  /* viewport-fit=cover goes edge-to-edge, so clear the landscape notch/rounded corner */
+  padding-left: max(1.25rem, env(safe-area-inset-left));
+  padding-right: max(1.25rem, env(safe-area-inset-right));
+}
+/* desktop padding wastes space at phone widths; tighten sides, keep enough bottom clearance for the save bar */
+@media (max-width: 680px) {
+  .main {
+    padding: 1.5rem 1rem 3rem;
+    /* viewport-fit=cover goes edge-to-edge, so clear the landscape notch/rounded corner */
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
 }
 
 /* ── buttons / inputs ───────────────────────────────────────────────────── */
@@ -324,6 +360,12 @@ input:invalid {
 }
 .panel-pad {
   padding: 1.15rem 1.25rem;
+}
+/* desktop padding wastes space at phone widths */
+@media (max-width: 680px) {
+  .panel-pad {
+    padding: 0.9rem 1rem;
+  }
 }
 .section-head {
   display: flex;
@@ -468,6 +510,12 @@ input:invalid {
   margin-left: 0.55rem;
   vertical-align: middle;
 }
+/* 0.58rem renders under 10px; raise to the ~10.9px floor at phone widths */
+@media (max-width: 680px) {
+  .flag {
+    font-size: 0.68rem;
+  }
+}
 .c-dates {
   white-space: nowrap;
 }
@@ -501,6 +549,12 @@ input:invalid {
 .tag.nonstop {
   color: var(--good);
   border-color: color-mix(in srgb, var(--good) 45%, transparent);
+}
+/* 0.62rem renders under 10px; raise to the ~10.9px floor at phone widths */
+@media (max-width: 680px) {
+  .tag {
+    font-size: 0.68rem;
+  }
 }
 .c-fare {
   text-align: right;
@@ -583,7 +637,8 @@ input:invalid {
     content: attr(data-label);
     display: block;
     font-family: var(--f-mono);
-    font-size: 0.58rem;
+    /* 0.58rem renders under 10px; raise to the ~10.9px floor at phone widths */
+    font-size: 0.68rem;
     font-weight: 600;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -617,6 +672,12 @@ input:invalid {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   flex: none;
+}
+/* 0.66rem renders under 10px; raise to the ~10.9px floor at phone widths */
+@media (max-width: 680px) {
+  .status .word {
+    font-size: 0.68rem;
+  }
 }
 .status.warn {
   border-left-color: var(--signal);
@@ -688,7 +749,9 @@ input:invalid {
 }
 .chart .axis-label {
   fill: var(--faint);
-  font-size: 10px;
+  /* viewBox units scale with render width; 14 stays legible at the 440px chart-wrap
+     minimum (~8px) without crowding date/price labels at desktop widths */
+  font-size: 14px;
   font-family: var(--f-mono);
 }
 .series-toggles {
@@ -874,6 +937,12 @@ table.data td.num {
   padding: 2.5rem 1.75rem;
   max-width: 640px;
 }
+/* desktop padding wastes space at phone widths */
+@media (max-width: 680px) {
+  .state {
+    padding: 1.75rem 1.25rem;
+  }
+}
 .state .state-tag {
   font-family: var(--f-mono);
   font-size: 0.66rem;
@@ -1000,6 +1069,12 @@ table.data td.num {
 .form-section {
   padding: 1.15rem 1.25rem;
 }
+/* desktop padding wastes space at phone widths */
+@media (max-width: 680px) {
+  .form-section {
+    padding: 0.9rem 1rem;
+  }
+}
 .form-section h3 {
   font-size: 1.1rem;
 }
@@ -1030,6 +1105,12 @@ table.data td.num {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.5rem;
 }
+@media (max-width: 420px) {
+  /* below 420px the paired inputs get too cramped side by side; stack them */
+  .leg-times {
+    grid-template-columns: 1fr;
+  }
+}
 .row-between {
   display: flex;
   align-items: center;
@@ -1048,8 +1129,11 @@ table.data td.num {
   background: var(--surface);
   border-top: 2px solid var(--line);
   padding: 0.85rem 0;
+  /* safe-area: pad past the iOS home indicator; env() with a fallback keeps this a no-op elsewhere */
+  padding-bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px));
   margin-top: 1.2rem;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.85rem;
 }
@@ -1116,4 +1200,46 @@ table.data td.num {
   font-size: 0.8rem;
   letter-spacing: 0.03em;
   z-index: 50;
+}
+
+/* touch targets: coarse pointers (touch laptops included) and small windows get ~44px hit areas */
+@media (pointer: coarse), (max-width: 680px) {
+  .tab {
+    min-height: 44px;
+  }
+  .btn {
+    min-height: 44px;
+  }
+  .chip {
+    padding: 0.55rem 0.75rem;
+  }
+  .series-toggles {
+    gap: 0.6rem;
+  }
+  /* label has no display set (defaults to inline), so the added min-height sits below the text unless we center it */
+  .choice {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+  }
+  /* inline text links: pad the tap area, then pull back with an equal negative margin so layout doesn't shift */
+  .detail-link,
+  .back-link,
+  .book {
+    display: inline-block;
+    padding: 0.5rem 0;
+    margin: -0.5rem 0;
+  }
+  /* later + equal specificity beats the base 0.3rem margin-top; keeps the offset, keeps the tap padding cancelled */
+  .c-flight .detail-link {
+    margin-top: -0.2rem;
+  }
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='number'],
+  input[type='time'],
+  select {
+    padding: 0.6rem 0.6rem;
+  }
 }

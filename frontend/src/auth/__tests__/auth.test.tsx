@@ -69,4 +69,15 @@ describe('auth gate', () => {
     await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
     expect(await screen.findByText(/not right/i)).toBeInTheDocument();
   });
+
+  it('wordmark text is wrapped in a hideable span', async () => {
+    api.session = vi.fn().mockResolvedValue({ authenticated: false });
+    renderApp();
+    await userEvent.type(await screen.findByLabelText(/password/i), 'hunter2');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    // the wordmark span needs a stable class so CSS can hide it below 680px
+    const wordmark = await screen.findByText('Flight watch');
+    expect(wordmark.className).toBe('brand-name');
+  });
 });

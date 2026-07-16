@@ -51,7 +51,7 @@ export function App() {
         <div className="topbar-inner">
           <div className="brand">
             <BrandMark />
-            Flight watch
+            <span className="brand-name">Flight watch</span>
             <span className="route">NYC⇄YYZ</span>
           </div>
           <nav className="nav" aria-label="Primary">
