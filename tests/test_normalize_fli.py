@@ -32,16 +32,11 @@ def make_request():
     )
 
 
-# tests here are all single-pair (legacy) requests -- every fixture offer's
-# actual airports are JFK->YYZ, so one entry covers them all.
-FAKE_TFS_BY_PAIR = {("JFK", "YYZ"): "FAKE_TFS"}
-
-
 def test_normalizes_real_fixture_pairs():
     fixture = load_fixture()
     request = make_request()
 
-    offers = normalize_fli_offers(fixture["pairs"], request, tfs_by_pair=FAKE_TFS_BY_PAIR)
+    offers = normalize_fli_offers(fixture["pairs"], request)
 
     # 4 pairs in the fixture; one (pair 2) has an unpriced return leg and
     # must be skipped -- see test_unpriced_pairing_is_skipped below.
@@ -60,8 +55,10 @@ def test_normalizes_real_fixture_pairs():
         assert isinstance(offer.outbound_arr, time)
         assert isinstance(offer.return_dep, time)
         assert isinstance(offer.return_arr, time)
-        assert offer.booking_url.startswith("https://www.google.com/travel/flights/booking?")
-        assert "tfs=FAKE_TFS" in offer.booking_url
+        # durable selected-flights /search link built per offer from its legs.
+        assert offer.booking_url.startswith(
+            "https://www.google.com/travel/flights/search?tfs="
+        )
 
 
 def test_pair_total_price_and_same_airline_pinned_to_fixture_pair_0():
@@ -70,7 +67,7 @@ def test_pair_total_price_and_same_airline_pinned_to_fixture_pair_0():
     fixture = load_fixture()
     request = make_request()
 
-    offers = normalize_fli_offers(fixture["pairs"], request, tfs_by_pair=FAKE_TFS_BY_PAIR)
+    offers = normalize_fli_offers(fixture["pairs"], request)
     offer0 = offers[0]
 
     assert offer0.price_usd == 435
@@ -89,7 +86,7 @@ def test_mixed_airline_pairing_is_slash_joined_and_stops_is_max_of_both_directio
     fixture = load_fixture()
     request = make_request()
 
-    offers = normalize_fli_offers(fixture["pairs"], request, tfs_by_pair=FAKE_TFS_BY_PAIR)
+    offers = normalize_fli_offers(fixture["pairs"], request)
     mixed = offers[1]
 
     assert mixed.airline == "DL / AA"
@@ -104,7 +101,7 @@ def test_unpriced_pairing_is_skipped():
     fixture = load_fixture()
     request = make_request()
 
-    offers = normalize_fli_offers(fixture["pairs"], request, tfs_by_pair=FAKE_TFS_BY_PAIR)
+    offers = normalize_fli_offers(fixture["pairs"], request)
 
     # only 3 offers survive out of 4 fixture pairs.
     assert len(offers) == 3
@@ -122,21 +119,22 @@ def test_multi_carrier_direction_keeps_every_distinct_carrier_no_drops_no_dupes(
     fixture = load_fixture()
     request = make_request()
 
-    offers = normalize_fli_offers(fixture["pairs"], request, tfs_by_pair=FAKE_TFS_BY_PAIR)
+    offers = normalize_fli_offers(fixture["pairs"], request)
     multi = offers[2]
 
     assert multi.price_usd == 512
     assert multi.airline == "DL / B6 / UA / AA"
 
 
-def test_booking_url_uses_the_pairs_own_booking_token_not_a_shared_one():
+def test_booking_url_is_per_itinerary_not_a_shared_query_level_url():
     fixture = load_fixture()
     request = make_request()
 
-    offers = normalize_fli_offers(fixture["pairs"], request, tfs_by_pair=FAKE_TFS_BY_PAIR)
+    offers = normalize_fli_offers(fixture["pairs"], request)
 
-    # different pairings must produce different tfu values (each itinerary's
-    # own booking token, not one shared query-level URL like fast-flights).
+    # different pairings encode different return legs into their tfs, so each
+    # gets its OWN selected-flights link -- not one shared query-level URL like
+    # fast-flights emitted.
     assert offers[0].booking_url != offers[1].booking_url
 
 
@@ -147,7 +145,7 @@ def test_itinerary_key_is_the_concrete_expected_format_for_fixture_pair_0():
     fixture = load_fixture()
     request = make_request()
 
-    offers = normalize_fli_offers(fixture["pairs"], request, tfs_by_pair=FAKE_TFS_BY_PAIR)
+    offers = normalize_fli_offers(fixture["pairs"], request)
 
     assert offers[0].itinerary_key == "DL5007.2026-08-15|DL5066.2026-08-17"
 
@@ -157,7 +155,7 @@ def test_itinerary_key_stable_across_polls_and_unaffected_by_price_change():
     request = make_request()
     pair = fixture["pairs"][0]
 
-    offers_first_poll = normalize_fli_offers([pair], request, tfs_by_pair=FAKE_TFS_BY_PAIR)
+    offers_first_poll = normalize_fli_offers([pair], request)
 
     # simulate a later poll where the fare moved but the flights didn't --
     # deep-copy the pair and bump both directions' price.
@@ -165,7 +163,7 @@ def test_itinerary_key_stable_across_polls_and_unaffected_by_price_change():
     pair_price_changed = copy.deepcopy(pair)
     pair_price_changed[0]["price"] = 999.0
     pair_price_changed[1]["price"] = 999.0
-    offers_second_poll = normalize_fli_offers([pair_price_changed], request, tfs_by_pair=FAKE_TFS_BY_PAIR)
+    offers_second_poll = normalize_fli_offers([pair_price_changed], request)
 
     assert offers_first_poll[0].itinerary_key == offers_second_poll[0].itinerary_key
     assert offers_first_poll[0].price_usd != offers_second_poll[0].price_usd
@@ -177,7 +175,7 @@ def test_different_itineraries_same_route_and_dates_get_different_keys():
     fixture = load_fixture()
     request = make_request()
 
-    offers = normalize_fli_offers(fixture["pairs"], request, tfs_by_pair=FAKE_TFS_BY_PAIR)
+    offers = normalize_fli_offers(fixture["pairs"], request)
 
     assert offers[0].itinerary_key != offers[1].itinerary_key
 
@@ -188,7 +186,7 @@ def test_per_direction_fields_populated_for_mixed_carrier_pairing():
     fixture = load_fixture()
     request = make_request()
 
-    offers = normalize_fli_offers(fixture["pairs"], request, tfs_by_pair=FAKE_TFS_BY_PAIR)
+    offers = normalize_fli_offers(fixture["pairs"], request)
     mixed = offers[1]
 
     assert mixed.outbound_airline == "DL"
@@ -214,7 +212,7 @@ def test_build_itinerary_key_direct_multi_leg_both_directions():
 
 
 def test_empty_pairs_list_returns_empty_list_without_error():
-    offers = normalize_fli_offers([], make_request(), tfs_by_pair=FAKE_TFS_BY_PAIR)
+    offers = normalize_fli_offers([], make_request())
 
     assert offers == []
 
@@ -253,7 +251,7 @@ def test_offer_actual_airports_come_from_the_legs_not_the_request():
         },
     ]
 
-    offers = normalize_fli_offers([raw_pair], request, tfs_by_pair=FAKE_TFS_BY_PAIR)
+    offers = normalize_fli_offers([raw_pair], request)
 
     assert len(offers) == 1
     assert offers[0].origin == "LGA"
@@ -291,7 +289,6 @@ def test_malformed_pair_missing_legs_is_skipped_without_raising_others():
     offers = normalize_fli_offers(
         [malformed_missing_legs, malformed_bad_datetime, malformed_wrong_pair_length, good],
         request,
-        tfs_by_pair=FAKE_TFS_BY_PAIR,
     )
 
     assert len(offers) == 1
@@ -323,11 +320,22 @@ def _matrix_offer_raw_pair(origin: str, destination: str, out_tok: str, ret_tok:
     ]
 
 
+def _decode_tfs_from_url(url: str) -> bytes:
+    """Decodes the raw protobuf bytes of the tfs param in a /search URL, so a
+    test can assert the offer's real airport codes are encoded inside it (not
+    just present as free text elsewhere in the URL)."""
+    import base64
+    from urllib.parse import parse_qs, urlparse
+
+    tfs = parse_qs(urlparse(url).query)["tfs"][0]
+    return base64.urlsafe_b64decode(tfs + "=" * ((4 - len(tfs) % 4) % 4))
+
+
 def test_offers_on_different_actual_pairs_get_their_own_route_consistent_tfs():
-    # the blocker guard: one matrix response holding offers on TWO different
-    # actual airport pairs must produce booking_urls whose tfs each matches
-    # THAT offer's own airports -- not one tfs stamped from the request's
-    # representative pair on every offer.
+    # the blocker guard, now by construction: each offer's tfs is built from
+    # its OWN legs, so two offers on different actual airport pairs get tfs
+    # tokens that each encode THAT offer's real airports -- there is no shared
+    # or representative tfs to mismatch the route.
     request = SearchRequest(
         origin="JFK",
         destination="YYZ",
@@ -336,31 +344,31 @@ def test_offers_on_different_actual_pairs_get_their_own_route_consistent_tfs():
         origins=["JFK", "LGA"],
         destinations=["YYZ", "YTZ"],
     )
-    tfs_by_pair = {
-        ("JFK", "YTZ"): "TFS_JFK_YTZ",
-        ("LGA", "YYZ"): "TFS_LGA_YYZ",
-    }
     jfk_ytz_pair = _matrix_offer_raw_pair("JFK", "YTZ", "out-1", "ret-1")
     lga_yyz_pair = _matrix_offer_raw_pair("LGA", "YYZ", "out-2", "ret-2")
 
-    offers = normalize_fli_offers([jfk_ytz_pair, lga_yyz_pair], request, tfs_by_pair=tfs_by_pair)
+    offers = normalize_fli_offers([jfk_ytz_pair, lga_yyz_pair], request)
 
     assert len(offers) == 2
     jfk_ytz_offer = next(o for o in offers if (o.origin, o.destination) == ("JFK", "YTZ"))
     lga_yyz_offer = next(o for o in offers if (o.origin, o.destination) == ("LGA", "YYZ"))
 
-    assert "tfs=TFS_JFK_YTZ" in jfk_ytz_offer.booking_url
-    assert "tfs=TFS_LGA_YYZ" in lga_yyz_offer.booking_url
-    # proving they're route-consistent, not a shared/representative tfs.
+    # each tfs must encode its OWN offer's airports and not the other's.
+    jfk_ytz_bytes = _decode_tfs_from_url(jfk_ytz_offer.booking_url)
+    lga_yyz_bytes = _decode_tfs_from_url(lga_yyz_offer.booking_url)
+    assert b"JFK" in jfk_ytz_bytes and b"YTZ" in jfk_ytz_bytes
+    assert b"LGA" in lga_yyz_bytes and b"YYZ" in lga_yyz_bytes
+    # the JFK/YTZ offer's tfs must NOT carry the LGA/YYZ route, and vice versa.
+    assert b"LGA" not in jfk_ytz_bytes
+    assert b"JFK" not in lga_yyz_bytes
     assert jfk_ytz_offer.booking_url != lga_yyz_offer.booking_url
-    assert "tfs=TFS_LGA_YYZ" not in jfk_ytz_offer.booking_url
-    assert "tfs=TFS_JFK_YTZ" not in lga_yyz_offer.booking_url
 
 
-def test_offer_pair_missing_from_tfs_by_pair_degrades_to_search_url_not_mismatched_tfs():
-    # a pair genuinely missing from tfs_by_pair must never get a tfs from a
-    # different pair -- it degrades to a dated Google Flights search URL for
-    # its own actual airports+dates instead.
+def test_offer_tfs_encodes_its_own_actual_airports_from_the_legs():
+    # a non-representative offer (flew LGA->YTZ while the request's rep pair is
+    # JFK->YYZ) must still get a route-correct selected-flights /search link,
+    # built from its own legs -- no dependence on any tfs map, no degraded
+    # free-text fallback.
     request = SearchRequest(
         origin="JFK",
         destination="YYZ",
@@ -369,18 +377,16 @@ def test_offer_pair_missing_from_tfs_by_pair_degrades_to_search_url_not_mismatch
         origins=["JFK", "LGA"],
         destinations=["YYZ", "YTZ"],
     )
-    # tfs_by_pair only covers JFK->YYZ; the offer below actually flew LGA->YTZ.
-    tfs_by_pair = {("JFK", "YYZ"): "TFS_JFK_YYZ"}
     lga_ytz_pair = _matrix_offer_raw_pair("LGA", "YTZ", "out-3", "ret-3")
 
-    offers = normalize_fli_offers([lga_ytz_pair], request, tfs_by_pair=tfs_by_pair)
+    offers = normalize_fli_offers([lga_ytz_pair], request)
 
     assert len(offers) == 1
     offer = offers[0]
     assert offer.origin == "LGA"
     assert offer.destination == "YTZ"
-    # no tfs param at all -- never a mismatched tfs from another pair.
-    assert "tfs=" not in offer.booking_url
-    assert offer.booking_url.startswith("https://www.google.com/travel/flights?")
-    assert "LGA" in offer.booking_url
-    assert "YTZ" in offer.booking_url
+    assert offer.booking_url.startswith("https://www.google.com/travel/flights/search?tfs=")
+    tfs_bytes = _decode_tfs_from_url(offer.booking_url)
+    # the offer's real airports are encoded inside the tfs, never the request's.
+    assert b"LGA" in tfs_bytes and b"YTZ" in tfs_bytes
+    assert b"JFK" not in tfs_bytes and b"YYZ" not in tfs_bytes

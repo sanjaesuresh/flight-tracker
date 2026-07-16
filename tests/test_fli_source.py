@@ -11,8 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from poller.data_source.booking_url import build_booking_url
-from poller.data_source.fli_source import FliSource, _extract_tfs_from_url
+from poller.data_source.fli_source import FliSource
 from poller.models import SearchRequest
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "roundtrip_fli_jfk_yyz.json"
@@ -45,12 +44,16 @@ def make_candidates(n):
 
 
 class FakeFetch:
-    """Records calls and returns the recorded fixture pairs + a fake tfs.
+    """Records calls and returns the recorded fixture pairs.
 
     `empty_first_n_calls_for` lets a test force the first N calls for a
     given outbound_date to return an empty result (simulating fli's
     observed soft-miss), so the retry-on-empty behavior can be exercised
     deterministically.
+
+    The fetch contract is now a plain list[list[dict]] (raw pairs) -- the
+    booking_url tfs is built per offer from its own legs in normalize_fli,
+    so there's no tfs map to thread out of fetch anymore.
     """
 
     def __init__(self, pairs=None, raise_on=None, empty_first_n_calls_for=None):
@@ -65,16 +68,11 @@ class FakeFetch:
         if request.outbound_date in self.raise_on:
             raise RuntimeError("simulated fli failure")
 
-        # keyed on the request's representative pair -- matches every
-        # fixture offer's actual airports (all JFK->YYZ), so the shared
-        # single-pair tests below (budget/rotation/pacing/retry) don't need
-        # to care about the tfs_by_pair shape at all.
-        tfs_by_pair = {(request.origin, request.destination): "FAKE_TFS"}
         remaining = self._empty_budget.get(request.outbound_date, 0)
         if remaining > 0:
             self._empty_budget[request.outbound_date] = remaining - 1
-            return [], tfs_by_pair
-        return self.pairs, tfs_by_pair
+            return []
+        return self.pairs
 
 
 class FakeSleep:
@@ -164,8 +162,10 @@ def test_confirm_candidates_produces_real_normalized_offers():
         assert len(offers) >= 1
         for offer in offers:
             assert offer.price_usd > 0
+            # durable selected-flights /search link (no session/tfu) -- both
+            # legs pre-selected, safe to store and click later from an email.
             assert offer.booking_url.startswith(
-                "https://www.google.com/travel/flights/booking?"
+                "https://www.google.com/travel/flights/search?tfs="
             )
             # the return-leg win: never None under fli.
             assert offer.return_dep is not None
@@ -215,28 +215,6 @@ def test_every_raised_exception_counts_as_a_failure_no_flightsnotfound_carveout(
     _, _, failed = source.confirm_candidates(candidates, cursor=0)
 
     assert failed == 2
-
-
-# --- C1 regression guard: tfs must survive parse_qs-style corruption ---
-
-
-def test_tfs_with_plus_slash_equals_survives_extraction_and_assembly_verbatim():
-    # parse_qs (the old extraction) decodes `+` to a space and this value is
-    # a standard base64 tfs token -- `+`, `/`, `=` are all routine there.
-    # Simulates create_query(...).url()'s shape (tfs=<token>&other=x) without
-    # needing fast_flights installed.
-    fake_query_url = "https://www.google.com/travel/flights?tfs=AA+BB/CC==&curr=USD"
-
-    extracted = _extract_tfs_from_url(fake_query_url)
-    # byte-for-byte identical to the substring that appeared in query.url() --
-    # no plus-to-space decoding, no re-encoding.
-    assert extracted == "AA+BB/CC=="
-
-    booking_url = build_booking_url(tfs=extracted, booking_token="tok123", currency="USD")
-
-    assert "tfs=AA+BB/CC==" in booking_url
-    # a `+` corrupted to a literal space would show up as this substring instead.
-    assert "tfs=AA BB/CC==" not in booking_url
 
 
 def test_coarse_scan_raises_not_implemented():
