@@ -33,82 +33,6 @@ logger = logging.getLogger(__name__)
 # exception type in fli; empty results come back as None/[], not a raise).
 
 
-def _extract_tfs_from_url(url: str) -> str:
-    """Pulls the raw `tfs` substring out of a query URL WITHOUT decoding it.
-
-    Deliberately NOT urllib.parse.parse_qs: parse_qs percent/plus-decodes
-    values, and standard base64 tfs tokens routinely contain `+`, `/`, `=`
-    -- parse_qs turns `+` into a literal space, silently corrupting the
-    token and producing a dead/wrong booking link downstream with no error
-    anywhere. create_query(...).url() is itself a valid URL, so its tfs
-    substring is already correctly URL-encoded; splitting on `tfs=`/`&`
-    preserves it byte-for-byte, exactly as it appeared in that URL, for
-    verbatim reuse in the final booking URL.
-    """
-    _, _, after_key = url.partition("tfs=")
-    value, _, _ = after_key.partition("&")
-    return value
-
-
-def _build_tfs(origin: str, destination: str, outbound_date: date, return_date: date) -> str:
-    """Builds the dated round-trip `tfs` search-token param for ONE airport
-    pair, offline.
-
-    fli (0.9.0) has no public tfs/URL builder of its own -- reuses
-    fast-flights' create_query(...).url(), exactly as google_flights.py's
-    _default_fetch already does, since tfs is a pure protobuf token with no
-    session state (same airports+dates always produce the same tfs
-    regardless of which library encodes it). Lazy import for the same
-    reason as fli itself: neither library is installed in the test venv.
-
-    Takes explicit (origin, destination, dates) rather than a SearchRequest
-    -- a matrix request's tfs must be built PER ACTUAL AIRPORT PAIR (see
-    _build_tfs_by_pair below), not once from the request's representative
-    pair, or offers on a non-representative pair get a booking URL whose
-    tfs disagrees with its own tfu.
-    """
-    from fast_flights import FlightQuery, Passengers, create_query
-
-    query = create_query(
-        flights=[
-            FlightQuery(
-                date=outbound_date.isoformat(),
-                from_airport=origin,
-                to_airport=destination,
-            ),
-            FlightQuery(
-                date=return_date.isoformat(),
-                from_airport=destination,
-                to_airport=origin,
-            ),
-        ],
-        seat="economy",
-        trip="round-trip",
-        passengers=Passengers(adults=1),
-        currency="USD",
-    )
-    return _extract_tfs_from_url(query.url())
-
-
-def _build_tfs_by_pair(request: SearchRequest) -> dict[tuple[str, str], str]:
-    """Builds one tfs PER (origin, destination) combination in the request's
-    airport matrix -- offers in one matrix response can land on any origin x
-    destination pair, and each must be paired with the tfs for ITS OWN
-    airports, not the request's representative pair (see fix rationale in
-    normalize_fli.py). Cheap: offline protobuf encoding, no network -- 4
-    tokens for a 2x2 matrix.
-    """
-    origins = request.origins or [request.origin]
-    destinations = request.destinations or [request.destination]
-    return {
-        (origin, destination): _build_tfs(
-            origin, destination, request.outbound_date, request.return_date
-        )
-        for origin in origins
-        for destination in destinations
-    }
-
-
 def _leg_to_raw(leg) -> dict:
     """Converts one fli FlightLeg into the plain-dict shape normalize_fli.py
     expects -- IATA codes (not enum members) and ISO datetime strings (not
@@ -135,22 +59,22 @@ def _result_to_raw(result) -> dict:
     }
 
 
-def _default_fetch(request: SearchRequest) -> tuple[list[list[dict]], dict[tuple[str, str], str]]:
+def _default_fetch(request: SearchRequest) -> list[list[dict]]:
     """Real fli search path. Imported lazily -- fli isn't installed in the
     test venv, only reachable when a caller doesn't inject its own fetch_fn.
 
-    Returns (raw_pairs, tfs_by_pair) rather than (raw, booking_url) like
-    google_flights.py's _default_fetch, since fli round-trip results carry a
-    booking_token PER PAIRING (unlike fast-flights' one query-level URL) --
-    normalize_fli_offers builds each offer's own booking_url from its own
-    pairing's token, paired with the tfs for THAT offer's actual airport
-    pair (tfs_by_pair), not one tfs shared across every pairing.
+    Returns just raw_pairs (a list of [outbound, return] dict pairs). Unlike
+    the old contract it no longer returns a tfs map: normalize_fli builds each
+    offer's booking_url PER OFFER from that offer's own legs (the durable
+    selected-flights /search link), so there's nothing route-level to thread
+    out here -- the tfs is inherently correct because it's encoded from the
+    offer's real flights.
 
-    Phase 3: builds ONE query across request.origins x request.destinations
-    (falling back to [request.origin]/[request.destination] for a legacy
-    single-pair request) -- build_flight_segments accepts a list[Airport] per
-    side natively, so this is a single fli search covering the whole airport
-    matrix rather than one search per O-D pair (see Verdict C).
+    Builds ONE query across request.origins x request.destinations (falling
+    back to [request.origin]/[request.destination] for a legacy single-pair
+    request) -- build_flight_segments accepts a list[Airport] per side
+    natively, so this is a single fli search covering the whole airport matrix
+    rather than one search per O-D pair.
     """
     from fli.core import build_flight_segments, resolve_airport
     from fli.models import FlightSearchFilters, PassengerInfo
@@ -175,11 +99,9 @@ def _default_fetch(request: SearchRequest) -> tuple[list[list[dict]], dict[tuple
     # USD, and Google's default is locale-dependent.
     results = client.search(filters, currency="USD")
 
-    raw_pairs = (
+    return (
         [[_result_to_raw(out), _result_to_raw(ret)] for out, ret in results] if results else []
     )
-    tfs_by_pair = _build_tfs_by_pair(request)
-    return raw_pairs, tfs_by_pair
 
 
 class FliSource(DataSource):
@@ -210,10 +132,10 @@ class FliSource(DataSource):
         empties, then 133 results). One retry only -- a second empty is
         treated as a genuine zero-offers result, not endlessly retried.
         """
-        raw_pairs, tfs_by_pair = self.fetch_fn(request)
+        raw_pairs = self.fetch_fn(request)
         if not raw_pairs:
-            raw_pairs, tfs_by_pair = self.fetch_fn(request)
-        return normalize_fli_offers(raw_pairs, request, tfs_by_pair=tfs_by_pair)
+            raw_pairs = self.fetch_fn(request)
+        return normalize_fli_offers(raw_pairs, request)
 
     def confirm_candidates(
         self, candidates: list[SearchRequest], cursor: int

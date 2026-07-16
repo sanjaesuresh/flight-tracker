@@ -30,9 +30,8 @@ Raw pair shape (one outbound dict, one return dict, each):
     }
 """
 from datetime import datetime, time
-from urllib.parse import urlencode
 
-from poller.data_source.booking_url import build_booking_url
+from poller.data_source.booking_url import build_selected_flights_search_url
 from poller.models import Offer, SearchRequest
 
 # separators for itinerary_key (Verdict D): "." between a leg's carrier+
@@ -47,17 +46,15 @@ _DIRECTION_SEP = "|"
 def normalize_fli_offers(
     raw_pairs: list[list[dict]],
     request: SearchRequest,
-    tfs_by_pair: dict[tuple[str, str], str],
 ) -> list[Offer]:
     """Converts raw fli (outbound, return) pair dicts into normalized Offers.
 
-    `tfs_by_pair` maps (origin, destination) -> the dated round-trip search
-    token for THAT airport pair (built offline by fli_source.py, one entry
-    per origin x destination combination in the request's matrix). A matrix
-    query can return offers on ANY actual airport pair, so each offer's
-    booking_url must be built from the tfs for its OWN actual airports, not
-    a single tfs shared across the whole response -- a mismatched tfs/tfu
-    pair is a dead/wrong-route link. See _normalize_one_pair.
+    Each offer's booking_url is the DURABLE selected-flights /search link,
+    built PER OFFER from that offer's own legs (airports, dates, airline,
+    flight numbers). Because the tfs is encoded from the offer's actual legs,
+    it is route-correct by construction -- there is no shared/representative
+    tfs to disagree with the itinerary, so the old tfs_by_pair matrix and its
+    degrade path are gone. See _normalize_one_pair.
 
     A malformed pairing (missing/bad fields) is skipped rather than raising,
     matching normalize.py's hardening -- one bad entry in a response
@@ -65,31 +62,28 @@ def normalize_fli_offers(
     """
     offers = []
     for raw_pair in raw_pairs:
-        offer = _normalize_one_pair(raw_pair, tfs_by_pair, request)
+        offer = _normalize_one_pair(raw_pair, request)
         if offer is not None:
             offers.append(offer)
     return offers
 
 
-def _build_degraded_search_url(
-    origin: str, destination: str, outbound_date, return_date
-) -> str:
-    """Fallback human-readable Google Flights search URL for an offer whose
-    actual airport pair has no entry in tfs_by_pair.
+def _direction_for_tfs(legs: list[dict]) -> dict:
+    """One direction's leg data in the shape build_selected_flights_tfs wants.
 
-    Mirrors normalize.py's build_search_url shape (a `q=` free-text search,
-    not a `tfs=` token) -- deliberately NOT a tfs=<something>, since there's
-    nothing route-correct to put there; a missing pair must degrade to a
-    working search link, never a mismatched booking deep-link.
+    Uses the FIRST leg's departure airport + the direction's departure DATE,
+    the LAST leg's arrival airport, and the first leg's airline+flight number
+    as the selected flight for that direction (matches the single-selected-
+    flight-per-direction shape both known-good oracles encode).
     """
-    params = {
-        "q": (
-            f"flights from {origin} to {destination} "
-            f"on {outbound_date.isoformat()} "
-            f"through {return_date.isoformat()}"
-        )
+    first, last = legs[0], legs[-1]
+    return {
+        "from": first["departure_airport"],
+        "to": last["arrival_airport"],
+        "date": _parse_leg_datetime(first["departure_datetime"]).date().isoformat(),
+        "airline": first["airline"],
+        "flight_number": first["flight_number"],
     }
-    return f"https://www.google.com/travel/flights?{urlencode(params)}"
 
 
 def _parse_leg_datetime(raw: str) -> datetime:
@@ -142,7 +136,7 @@ def _direction_airline(legs: list[dict]) -> str:
 
 
 def _normalize_one_pair(
-    raw_pair: list[dict], tfs_by_pair: dict[tuple[str, str], str], request: SearchRequest
+    raw_pair: list[dict], request: SearchRequest
 ) -> Offer | None:
     try:
         if len(raw_pair) != 2:
@@ -190,21 +184,16 @@ def _normalize_one_pair(
         actual_origin = out_legs[0]["departure_airport"]
         actual_destination = out_legs[-1]["arrival_airport"]
 
-        booking_token = ret_raw["booking_token"]
-        # the blocker fix: tfs must come from THIS offer's own actual airport
-        # pair, never the request's representative pair -- a matrix response
-        # can mix offers across every origin x destination combination, and
-        # stamping one shared tfs on all of them produces a booking_url whose
-        # tfs and tfu disagree on the route for any non-representative offer.
-        tfs = tfs_by_pair.get((actual_origin, actual_destination))
-        if tfs is None:
-            # degrade to a route-correct search URL rather than ever emit a
-            # tfs/tfu pair that disagrees on the airports.
-            booking_url = _build_degraded_search_url(
-                actual_origin, actual_destination, request.outbound_date, request.return_date
-            )
-        else:
-            booking_url = build_booking_url(tfs=tfs, booking_token=booking_token, currency="USD")
+        # the fix: build the durable selected-flights /search link from THIS
+        # offer's own outbound+return legs. Encoding the exact flights into
+        # tfs opens Google with both legs pre-selected (not the all-options
+        # search page), and because it carries no session state the stored
+        # link still renders correctly whenever a user later clicks it from an
+        # alert email. Route-correct by construction -- the tfs is built from
+        # the offer's real legs, so it can never disagree with the itinerary.
+        booking_url = build_selected_flights_search_url(
+            [_direction_for_tfs(out_legs), _direction_for_tfs(ret_legs)]
+        )
 
         return Offer(
             price_usd=int(price),
