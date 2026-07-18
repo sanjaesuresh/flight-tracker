@@ -81,6 +81,14 @@ class Offer:
     return_flight_numbers: str | None = None
     outbound_stops: int | None = None
     return_stops: int | None = None
+    # mixed-route visibility: the RETURN leg's own actual airports, distinct
+    # from origin/destination above (which are the OUTBOUND leg's actual
+    # airports). A matrix query pairs up origins/destinations independently
+    # per direction, so a return can land at a different airport than the
+    # outbound departed from (e.g. out LGA->YYZ, back YTZ->JFK). None means
+    # "unknown" -- only the fli normalizer populates these.
+    return_origin: str | None = None
+    return_destination: str | None = None
 
 
 @dataclass

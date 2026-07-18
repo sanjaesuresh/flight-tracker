@@ -103,7 +103,16 @@ class _CountingCursor:
         return None
 
 
-def make_offer(price_usd, airline, stops=0, itinerary_key=None, origin=None, destination=None):
+def make_offer(
+    price_usd,
+    airline,
+    stops=0,
+    itinerary_key=None,
+    origin=None,
+    destination=None,
+    return_origin=None,
+    return_destination=None,
+):
     return Offer(
         price_usd=price_usd,
         airline=airline,
@@ -116,6 +125,8 @@ def make_offer(price_usd, airline, stops=0, itinerary_key=None, origin=None, des
         origin=origin,
         destination=destination,
         itinerary_key=itinerary_key,
+        return_origin=return_origin,
+        return_destination=return_destination,
     )
 
 
@@ -326,6 +337,30 @@ def test_offer_actual_airports_used_when_set_request_pair_only_as_fallback():
     # offer with no actual airports set -> falls back to the request's pair.
     assert rows_by_price[180][1] == "LGA"
     assert rows_by_price[180][2] == "YYZ"
+
+
+def test_return_leg_airports_round_trip_and_none_stores_null():
+    """The two new columns are appended at the end of the INSERT param
+    tuple (mirrors how the Phase 4 columns were added) -- an offer with
+    return airports set stores them, and an offer left at the None default
+    (e.g. the fast-flights fallback path) stores NULLs."""
+    req = make_request()
+    offers = [
+        make_offer(
+            200, "AC", itinerary_key="K1",
+            return_origin="YTZ", return_destination="JFK",
+        ),
+        make_offer(180, "PD", itinerary_key="K2"),  # left at None defaults
+    ]
+
+    conn = FakeConn()
+    scraped_at = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+
+    write_snapshots(conn, scraped_at, [(req, offers)])
+
+    rows_by_price = {event[2][5]: event[2] for event in conn.events if event[0] == "execute"}
+    assert rows_by_price[200][-2:] == ("YTZ", "JFK")
+    assert rows_by_price[180][-2:] == (None, None)
 
 
 def test_history_for_pair_issues_expected_sql_and_params():

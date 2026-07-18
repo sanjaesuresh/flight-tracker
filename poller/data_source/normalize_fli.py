@@ -184,6 +184,15 @@ def _normalize_one_pair(
         actual_origin = out_legs[0]["departure_airport"]
         actual_destination = out_legs[-1]["arrival_airport"]
 
+        # mixed-route visibility: the RETURN leg's own actual airports,
+        # read the same way as the outbound's above -- a matrix query pairs
+        # up origins/destinations independently per direction, so these can
+        # differ from actual_origin/actual_destination (out LGA->YYZ, back
+        # YTZ->JFK). Stored regardless of whether they match the outbound;
+        # "mixed" is derived at display time, not decided here.
+        return_origin = ret_legs[0]["departure_airport"]
+        return_destination = ret_legs[-1]["arrival_airport"]
+
         # the fix: build the durable selected-flights /search link from THIS
         # offer's own outbound+return legs. Encoding the exact flights into
         # tfs opens Google with both legs pre-selected (not the all-options
@@ -213,6 +222,8 @@ def _normalize_one_pair(
             return_flight_numbers=_flight_numbers(ret_legs),
             outbound_stops=outbound_stops,
             return_stops=return_stops,
+            return_origin=return_origin,
+            return_destination=return_destination,
         )
     except (KeyError, IndexError, TypeError, ValueError):
         # defensive: any malformed shape (missing legs, bad datetime string,

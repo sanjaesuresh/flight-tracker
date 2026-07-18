@@ -16,7 +16,11 @@ Operational steps for running and maintaining the flight-tracker poller.
    - `select id, dry_run from settings;` should show `id = 1`, `dry_run = true`.
 
 `db/schema.sql` is idempotent (`create table if not exists`, `on conflict (id) do nothing`), so
-re-running it against an already-set-up database is safe.
+re-running it against an already-set-up database is safe. The two new nullable columns (`return_origin`, `return_destination`) require a schema-first
+rollout: apply the idempotent ALTERs to Neon (via step 1: paste into the Neon SQL editor or
+`psql -f db/schema.sql`) before deploying the poller build that writes these columns.
+Deploying the poller first will fail every snapshot INSERT on missing columns; existing rows
+stay null and render as before.
 
 ## Google Flights data source strategy (ROTATING branch)
 

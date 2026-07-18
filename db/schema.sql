@@ -61,6 +61,16 @@ alter table price_snapshots add column if not exists return_flight_numbers text;
 alter table price_snapshots add column if not exists outbound_stops int;
 alter table price_snapshots add column if not exists return_stops int;
 
+-- Mixed-route visibility: the RETURN leg's own actual airports, distinct
+-- from origin/destination above (which are the OUTBOUND leg's actual
+-- airports). A matrix query pairs origins/destinations independently per
+-- direction, so an offer's return can land at a different airport than the
+-- outbound departed from (e.g. out LGA->YYZ, back YTZ->JFK). Nullable: only
+-- the fli normalizer populates these; the fast-flights fallback leaves them
+-- null.
+alter table price_snapshots add column if not exists return_origin text;
+alter table price_snapshots add column if not exists return_destination text;
+
 -- Supports the per-option hourly history lookup (Phase 5): same route+dates,
 -- filtered to one itinerary_key, most-recent first.
 create index if not exists price_snapshots_itinerary_scraped_idx

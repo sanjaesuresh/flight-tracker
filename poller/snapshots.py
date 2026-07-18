@@ -22,7 +22,7 @@ KEEP_N_ITINERARIES = 10
 # outbound_date, keeping the table bounded on Neon's free tier.
 RETENTION_DAYS = 90
 
-# the 20-positional %s bind is a footgun: the values tuple built in
+# the 22-positional %s bind is a footgun: the values tuple built in
 # _insert_request MUST stay in the exact same order as this column list.
 INSERT_SQL = """
     INSERT INTO price_snapshots (
@@ -32,8 +32,9 @@ INSERT_SQL = """
         booking_url,
         itinerary_key, outbound_airline, return_airline,
         outbound_flight_numbers, return_flight_numbers,
-        outbound_stops, return_stops
-    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        outbound_stops, return_stops,
+        return_origin, return_destination
+    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
 
 PRUNE_PAST_OUTBOUND_SQL = """
@@ -155,6 +156,8 @@ def _insert_request(conn, scraped_at: datetime, request: SearchRequest, rows: li
                     offer.return_flight_numbers,
                     offer.outbound_stops,
                     offer.return_stops,
+                    offer.return_origin,
+                    offer.return_destination,
                 ),
             )
     conn.commit()

@@ -261,6 +261,82 @@ def test_offer_actual_airports_come_from_the_legs_not_the_request():
     assert offers[0].destination != request.destination
 
 
+def test_return_leg_airports_captured_when_return_uses_different_airports():
+    # mixed route: outbound LGA->YYZ, return YTZ->JFK -- a matrix query can
+    # pair up any origin x destination on each direction independently, so
+    # the offer must carry the RETURN leg's own actual airports too, not
+    # just the outbound's (which origin/destination already capture).
+    request = SearchRequest(
+        origin="JFK",
+        destination="YYZ",
+        outbound_date=date(2026, 8, 15),
+        return_date=date(2026, 8, 17),
+        origins=["JFK", "LGA"],
+        destinations=["YYZ", "YTZ"],
+    )
+    raw_pair = [
+        {
+            "price": 300, "stops": 0, "booking_token": "out-tok",
+            "legs": [{
+                "airline": "AC", "flight_number": "759",
+                "departure_airport": "LGA", "arrival_airport": "YYZ",
+                "departure_datetime": "2026-08-15T08:00:00",
+                "arrival_datetime": "2026-08-15T09:30:00",
+            }],
+        },
+        {
+            "price": 300, "stops": 0, "booking_token": "ret-tok",
+            "legs": [{
+                "airline": "AC", "flight_number": "760",
+                "departure_airport": "YTZ", "arrival_airport": "JFK",
+                "departure_datetime": "2026-08-17T18:00:00",
+                "arrival_datetime": "2026-08-17T19:30:00",
+            }],
+        },
+    ]
+
+    offers = normalize_fli_offers([raw_pair], request)
+
+    assert len(offers) == 1
+    assert offers[0].origin == "LGA"
+    assert offers[0].destination == "YYZ"
+    assert offers[0].return_origin == "YTZ"
+    assert offers[0].return_destination == "JFK"
+
+
+def test_return_leg_airports_captured_for_symmetric_pair():
+    # a symmetric pair (return airports mirror the outbound's) must still
+    # store return_origin/return_destination -- "mixed" is derived at
+    # display time from comparing the two, not decided at storage time.
+    request = make_request()
+    raw_pair = [
+        {
+            "price": 300, "stops": 0, "booking_token": "out-tok",
+            "legs": [{
+                "airline": "DL", "flight_number": "1",
+                "departure_airport": "JFK", "arrival_airport": "YYZ",
+                "departure_datetime": "2026-08-15T06:00:00",
+                "arrival_datetime": "2026-08-15T07:30:00",
+            }],
+        },
+        {
+            "price": 300, "stops": 0, "booking_token": "ret-tok",
+            "legs": [{
+                "airline": "DL", "flight_number": "2",
+                "departure_airport": "YYZ", "arrival_airport": "JFK",
+                "departure_datetime": "2026-08-17T06:00:00",
+                "arrival_datetime": "2026-08-17T07:53:00",
+            }],
+        },
+    ]
+
+    offers = normalize_fli_offers([raw_pair], request)
+
+    assert len(offers) == 1
+    assert offers[0].return_origin == "YYZ"
+    assert offers[0].return_destination == "JFK"
+
+
 def test_malformed_pair_missing_legs_is_skipped_without_raising_others():
     request = make_request()
     good = load_fixture()["pairs"][0]
