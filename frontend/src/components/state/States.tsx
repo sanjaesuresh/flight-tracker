@@ -35,9 +35,7 @@ export function EmptyState() {
 export function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="state" role="alert">
-      <div className="state-tag" style={{ color: 'var(--bad)' }}>
-        Out of service
-      </div>
+      <div className="state-tag state-tag--bad">Out of service</div>
       <h2>Board offline</h2>
       <p>
         Flight watch couldn’t reach the fare database — a free database can take a moment to wake

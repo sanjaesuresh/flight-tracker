@@ -24,6 +24,8 @@ const snapshot = (p: Partial<PriceSnapshot>): PriceSnapshot => ({
   return_flight_numbers: null,
   outbound_stops: null,
   return_stops: null,
+  return_origin: null,
+  return_destination: null,
   ...p,
 });
 
@@ -217,6 +219,44 @@ describe('PriceGraph touch tap-then-click race', () => {
     fireEvent.pointerDown(target);
     fireEvent.click(target);
     expect(queryCard()).toBeNull();
+  });
+});
+
+describe('PriceGraph mixed-route card', () => {
+  it('shows a signal-colored ret-airports segment before the times for a mixed flight', () => {
+    const mixedSeries: GraphSeries = {
+      key: 'LGA-YYZ',
+      origin: 'LGA',
+      destination: 'YYZ',
+      points: [point({ return_origin: 'YTZ', return_destination: 'JFK' })],
+    };
+    render(<PriceGraph series={[mixedSeries]} />);
+    fireEvent.mouseEnter(screen.getByRole('button', { name: detailedName }));
+    const card = getCard();
+    expect(card.getByText(/ret YTZ→JFK/)).toBeInTheDocument();
+    expect(card.getByText(/6:30 PM – 8:01 PM/)).toBeInTheDocument();
+  });
+
+  it('includes the return pair in the hit target aria-label for a mixed flight, but not a symmetric one', () => {
+    const mixedSeries: GraphSeries = {
+      key: 'LGA-YYZ-mixed',
+      origin: 'LGA',
+      destination: 'YYZ',
+      points: [point({ return_origin: 'YTZ', return_destination: 'JFK' })],
+    };
+    render(<PriceGraph series={[mixedSeries, detailedSeries]} />);
+    expect(
+      screen.getByRole('button', { name: /returns YTZ to JFK/ }),
+    ).toBeInTheDocument();
+    // detailedSeries is symmetric (no return_origin/destination override) — its name
+    // has the same route/date prefix as the mixed one, so pick it out by absence of "returns"
+    // rather than reusing detailedName, which would ambiguously match both hit targets here.
+    const symmetricLabel = screen
+      .getAllByRole('button', { name: detailedName })
+      .map((el) => el.getAttribute('aria-label'))
+      .find((label) => !label?.includes('returns'));
+    expect(symmetricLabel).toBeDefined();
+    expect(symmetricLabel).not.toMatch(/returns/);
   });
 });
 

@@ -132,6 +132,15 @@ describe('api server path', () => {
     expect(payload.latest.some((s) => s.itinerary_key === null)).toBe(true);
     // dates come back as plain YYYY-MM-DD strings
     expect(payload.latest[0].outbound_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // mixed-route visibility: the seeded mixed option (out LGA->YYZ, back
+    // YTZ->JFK) carries its real return-leg airports; the fast-flights
+    // fallback row keeps both null, same as the rest of its nullable fields
+    expect(
+      payload.latest.some((s) => s.return_origin === 'YTZ' && s.return_destination === 'JFK'),
+    ).toBe(true);
+    expect(
+      payload.latest.some((s) => s.return_origin === null && s.return_destination === null),
+    ).toBe(true);
   });
 
   it('reads and normalizes settings on PUT (drops end-before-start pattern)', async () => {

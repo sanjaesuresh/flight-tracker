@@ -173,7 +173,7 @@ export function SettingsForm({
 
       {/* one fieldset disables every editable control at once when locked; the
           unlock prompt below stays outside it so it's never disabled by itself */}
-      <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0 }}>
+      <fieldset disabled={locked} className="fieldset-reset">
       <section className="panel form-section" aria-labelledby="airports-h">
         <h3 id="airports-h">Airports</h3>
         <p className="hint" style={{ margin: '0.2rem 0 0.9rem' }}>
@@ -181,7 +181,7 @@ export function SettingsForm({
           ranked first — never shown exclusively.
         </p>
         <div className="form-grid">
-          <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+          <fieldset className="field fieldset-reset">
             <legend className="legend-label">Origins (NYC)</legend>
             <div className="choice-set">
               {FIXED_ORIGINS.map((code) => (
@@ -202,7 +202,7 @@ export function SettingsForm({
             )}
           </fieldset>
 
-          <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+          <fieldset className="field fieldset-reset">
             <legend className="legend-label">Destinations (Toronto)</legend>
             <div className="choice-set">
               {FIXED_DESTINATIONS.map((code) => (

@@ -5,12 +5,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider.tsx';
 import { api, ApiError } from '../lib/api.js';
-import { cameFromBoard, type OptionParams } from '../lib/route.js';
+import { cameFromBoard, isMixedReturn, type OptionParams } from '../lib/route.js';
 import type { OptionHistoryPayload, PriceSnapshot } from '../lib/types.js';
 import { historyStats } from '../lib/filter.js';
 import { formatFlightDate, formatTimeOfDay, formatTimestamp } from '../lib/timezone.js';
+import { BookingLink } from '../components/BookingLink.tsx';
 import { OptionPriceChart } from '../components/OptionPriceChart.tsx';
 import { ErrorState, OptionNotFoundState } from '../components/state/States.tsx';
+
+// One-time settle-in for the hero fare: each character gets its own span so the
+// perforated stub's rotateX flip can stagger across "$185" instead of animating
+// the string as one flat block. Purely decorative (the wrapping .fare-display is
+// aria-hidden) — the accessible amount is the plain-text .amount sibling right
+// beside it, so screen readers see the price as a single unbroken token
+// regardless of this per-digit markup. Duplicated from Dashboard.tsx rather than
+// shared: this task's file allowlist doesn't include a new components file.
+function fareDigits(text: string) {
+  return text.split('').map((ch, i) => (
+    <span key={i} className="fare-digit" style={{ animationDelay: `${i * 45}ms` }}>
+      {ch}
+    </span>
+  ));
+}
 
 type Status = 'loading' | 'error' | 'not_found' | 'ready';
 
@@ -30,6 +46,11 @@ function LegCard({
   airline,
   flightNumbers,
   stops,
+  routeOrigin,
+  routeDestination,
+  // set only on the Return card, and only when the trip is mixed — the Outbound
+  // leg is always the plain outbound pair, never highlighted.
+  differs,
 }: {
   title: string;
   date: string;
@@ -38,12 +59,19 @@ function LegCard({
   airline: string | null;
   flightNumbers: string | null;
   stops: number | null;
+  routeOrigin: string;
+  routeDestination: string;
+  differs?: boolean;
 }) {
   return (
     <section className="panel panel-pad leg-card" aria-label={`${title} leg`}>
       <div className="section-head" style={{ marginBottom: '0.6rem' }}>
         <h3>{title}</h3>
         <span className="field-label">{formatFlightDate(date)}</span>
+      </div>
+      <div className={`leg-route${differs ? ' differs' : ''}`}>
+        {routeOrigin} → {routeDestination}
+        {differs && <span className="ret-airports"> · different airports</span>}
       </div>
       <div className="leg-times-line mono">
         {formatTimeOfDay(dep)} <span className="seg">→</span> {formatTimeOfDay(arr)}
@@ -121,6 +149,11 @@ export function OptionDetail({ params }: { params: OptionParams }) {
   const label = `${o.origin} to ${o.destination}, ${formatFlightDate(o.outbound_date)} to ${formatFlightDate(o.return_date)}`;
   const first = data.points[0] ?? null;
   const last = data.points[data.points.length - 1] ?? null;
+  const mixed = isMixedReturn(o);
+  // the Return leg's own airports — falls back to the mirrored outbound pair on
+  // old rows that never got return_origin/return_destination populated.
+  const returnOrigin = o.return_origin ?? o.destination;
+  const returnDestination = o.return_destination ?? o.origin;
 
   return (
     <div className="stack">
@@ -142,34 +175,43 @@ export function OptionDetail({ params }: { params: OptionParams }) {
         </a>
       </nav>
 
-      <div className="hero">
-        <div className="field-label" style={{ flexBasis: '100%' }}>
-          Tracked option
-        </div>
-        <div className="hero-main">
-          <span className="amount">${o.price_usd}</span>
-          <div>
-            <h1 className="hero-route" tabIndex={-1} ref={headingRef}>
-              {o.origin} → {o.destination}
-            </h1>
-            <div className="hero-meta">
-              {formatFlightDate(o.outbound_date)} – {formatFlightDate(o.return_date)}
-              {' · '}
-              {o.airline ?? 'Airline n/a'}
-            </div>
+      {/* same ticket composition as the Dashboard hero, at a reduced fare scale
+          (.hero--compact) — no "at its low" stub badge here, since this hero's
+          kicker ("Tracked option") makes no lowest-fare claim to restate; the
+          genuine, data-backed "At its low" flag lives below in the stat grid,
+          driven by a real comparison against this option's own price history */}
+      <div className="hero hero--compact">
+        <div className="ticket-main">
+          <div className="field-label">Tracked option</div>
+          <h1 className="hero-route" tabIndex={-1} ref={headingRef}>
+            {o.origin} → {o.destination}
+          </h1>
+          <div className="hero-meta">
+            {formatFlightDate(o.outbound_date)} – {formatFlightDate(o.return_date)}
+            {' · '}
+            {o.airline ?? 'Airline n/a'}
+            {mixed && (
+              <>
+                {' · '}
+                <span className="ret-airports">
+                  returns {o.return_origin} → {o.return_destination}
+                </span>
+              </>
+            )}
           </div>
+          {/* booking_url used verbatim; omitted entirely when the row has none */}
+          {o.booking_url && <BookingLink url={o.booking_url} />}
         </div>
-        {/* booking_url used verbatim; omitted entirely when the row has none */}
-        {o.booking_url && (
-          <a
-            className="btn btn-primary hero-book"
-            href={o.booking_url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            View on Google Flights
-          </a>
-        )}
+        <div className="fare-stub">
+          <span className="fare-notch fare-notch-top" aria-hidden="true" />
+          <span className="fare-notch fare-notch-bottom" aria-hidden="true" />
+          <span className="fare-display" aria-hidden="true">
+            {fareDigits(`$${o.price_usd}`)}
+          </span>
+          {/* the real accessible text: visually hidden (not aria-hidden), so it
+              stays in the a11y tree as a single plain "$185" text node */}
+          <span className="amount sr-only">${o.price_usd}</span>
+        </div>
       </div>
 
       <div className="legs-grid">
@@ -181,6 +223,8 @@ export function OptionDetail({ params }: { params: OptionParams }) {
           airline={o.outbound_airline ?? o.airline}
           flightNumbers={o.outbound_flight_numbers}
           stops={o.outbound_stops}
+          routeOrigin={o.origin}
+          routeDestination={o.destination}
         />
         <LegCard
           title="Return"
@@ -190,6 +234,9 @@ export function OptionDetail({ params }: { params: OptionParams }) {
           airline={o.return_airline ?? o.airline}
           flightNumbers={o.return_flight_numbers}
           stops={o.return_stops}
+          routeOrigin={returnOrigin}
+          routeDestination={returnDestination}
+          differs={mixed}
         />
       </div>
 

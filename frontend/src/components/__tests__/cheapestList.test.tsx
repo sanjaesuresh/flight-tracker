@@ -25,6 +25,8 @@ const option = (p: Partial<RankedOption>): RankedOption => ({
   return_flight_numbers: null,
   outbound_stops: null,
   return_stops: null,
+  return_origin: null,
+  return_destination: null,
   preferred: false,
   ...p,
 });
@@ -129,6 +131,26 @@ describe('CheapestList row affordances', () => {
     window.location.hash = '';
     fireEvent.click(screen.getByRole('link', { name: /book/i }));
     expect(window.location.hash).toBe('');
+  });
+});
+
+describe('CheapestList mixed-route ret line', () => {
+  it('renders a ret line with the return airports for a mixed option', () => {
+    const { container } = render(
+      <CheapestList options={[option({ return_origin: 'YTZ', return_destination: 'JFK' })]} />,
+    );
+    const retLine = container.querySelector('.route-ret');
+    expect(retLine).not.toBeNull();
+    expect(retLine).toHaveTextContent('ret');
+    expect(retLine).toHaveTextContent('YTZ');
+    expect(retLine).toHaveTextContent('JFK');
+  });
+
+  it('renders NO ret line for a symmetric option (mirrored return pair)', () => {
+    const { container } = render(
+      <CheapestList options={[option({ return_origin: 'YYZ', return_destination: 'LGA' })]} />,
+    );
+    expect(container.querySelector('.route-ret')).toBeNull();
   });
 });
 

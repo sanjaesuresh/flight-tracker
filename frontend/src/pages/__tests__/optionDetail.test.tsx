@@ -36,6 +36,8 @@ const option = (p: Partial<PriceSnapshot> = {}): PriceSnapshot => ({
   return_flight_numbers: '2210',
   outbound_stops: 0,
   return_stops: 1,
+  return_origin: null,
+  return_destination: null,
   ...p,
 });
 
@@ -196,6 +198,37 @@ describe('OptionDetail', () => {
     expect(notPrevented).toBe(false);
     expect(backSpy).toHaveBeenCalledTimes(1);
     backSpy.mockRestore();
+  });
+
+  it('shows the header note and Return leg highlight for a mixed option', async () => {
+    api.optionHistory = vi.fn().mockResolvedValue(
+      payload(manyPoints, { return_origin: 'YTZ', return_destination: 'JFK' }),
+    );
+    renderDetail();
+    await screen.findByRole('heading', { name: /LGA → YYZ/ });
+
+    expect(screen.getByText(/returns YTZ → JFK/)).toBeInTheDocument();
+
+    const outbound = screen.getByRole('region', { name: /outbound leg/i });
+    expect(outbound).toHaveTextContent('LGA → YYZ');
+
+    const ret = screen.getByRole('region', { name: /return leg/i });
+    expect(ret).toHaveTextContent('YTZ → JFK');
+    expect(ret).toHaveTextContent('different airports');
+  });
+
+  it('shows neither the header note nor the Return leg highlight for a symmetric option', async () => {
+    api.optionHistory = vi.fn().mockResolvedValue(
+      payload(manyPoints, { return_origin: 'YYZ', return_destination: 'LGA' }),
+    );
+    renderDetail();
+    await screen.findByRole('heading', { name: /LGA → YYZ/ });
+
+    expect(screen.queryByText(/returns/i)).toBeNull();
+
+    const ret = screen.getByRole('region', { name: /return leg/i });
+    expect(ret).toHaveTextContent('YYZ → LGA');
+    expect(ret).not.toHaveTextContent('different airports');
   });
 
   it('back link opens in new tab on cmd/ctrl+click (does not call history.back)', async () => {

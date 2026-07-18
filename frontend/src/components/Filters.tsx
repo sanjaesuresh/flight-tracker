@@ -32,7 +32,7 @@ function TimeRange({
   onTo: (v: string | null) => void;
 }) {
   return (
-    <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+    <fieldset className="field fieldset-reset">
       <legend className="legend-label">{label}</legend>
       <div className="leg-times">
         <input
@@ -67,7 +67,7 @@ function DateRange({
   onTo: (v: string | null) => void;
 }) {
   return (
-    <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+    <fieldset className="field fieldset-reset">
       <legend className="legend-label">{label}</legend>
       <div className="leg-times">
         <input
@@ -111,7 +111,7 @@ export function Filters({ filter, onChange, airlines }: Props) {
 
         <div className="stack" style={{ gap: '1rem' }}>
           {airlines.length > 0 && (
-            <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+            <fieldset className="field fieldset-reset">
               <legend className="legend-label">Airline</legend>
               <div className="choice-set">
                 {airlines.map((a) => (
@@ -128,7 +128,7 @@ export function Filters({ filter, onChange, airlines }: Props) {
             </fieldset>
           )}
 
-          <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+          <fieldset className="field fieldset-reset">
             <legend className="legend-label">Stops</legend>
             <div className="choice-set">
               {STOP_OPTIONS.map((opt) => {
@@ -149,7 +149,7 @@ export function Filters({ filter, onChange, airlines }: Props) {
             </div>
           </fieldset>
 
-          <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+          <fieldset className="field fieldset-reset">
             <legend className="legend-label">Price (USD)</legend>
             <div className="leg-times">
               <input

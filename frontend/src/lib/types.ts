@@ -62,6 +62,11 @@ export interface PriceSnapshot {
   return_flight_numbers: string | null;
   outbound_stops: number | null;
   return_stops: number | null;
+  // mixed-route visibility — the return leg's own actual airports (may differ
+  // from destination/origin above). Null on old rows and fast-flights fallback
+  // rows; the fli normalizer populates both mixed and symmetric trips alike.
+  return_origin: string | null;
+  return_destination: string | null;
 }
 
 // poller_state (id = 1), the health/staleness signal.

@@ -2,12 +2,12 @@
 // toggle chips. Hand-drawn SVG (no chart dependency) for full control of a11y and
 // theming. The chart is never the only way to read the data: a real data table is
 // always available as an alternative, and the SVG has a descriptive role/label.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { GraphPoint, GraphSeries } from '../lib/types.js';
 import { formatShortDate, formatFlightDate, formatTimeOfDay } from '../lib/timezone.js';
+import { isMixedReturn } from '../lib/route.js';
+import { useChartHoverCard } from './useChartHoverCard.ts';
 
-// distinguishable on both light and dark surfaces; not relied on alone (chips +
-// table carry labels/values).
 // legible on both the light ticket and dark board surfaces; distinct in hue so the
 // series read apart without relying on color alone (chips + table carry labels).
 const PALETTE = ['#e07b39', '#3aa39c', '#5b8dd6', '#c05fa8', '#8aa63c', '#b0563f'];
@@ -15,10 +15,6 @@ const PALETTE = ['#e07b39', '#3aa39c', '#5b8dd6', '#c05fa8', '#8aa63c', '#b0563f
 const W = 760;
 const H = 300;
 const PAD = { top: 16, right: 16, bottom: 40, left: 52 };
-
-function clamp(n: number, lo: number, hi: number) {
-  return Math.min(hi, Math.max(lo, n));
-}
 
 // same "Nonstop"/"N stops" wording as CheapestList, kept local since the graph's
 // aria-label and card need it without importing a whole other component.
@@ -35,58 +31,28 @@ function describePoint(s: GraphSeries, p: GraphPoint): string {
   const parts = [
     `${s.origin} to ${s.destination}`,
     `${formatFlightDate(p.flight.outbound_date)} to ${formatFlightDate(p.flight.return_date)}`,
-    `$${p.price_usd}`,
   ];
+  // mixed return (different return-leg airports) is visible in the hover card, so screen
+  // reader users need the same fact spoken here rather than just implied by symmetric airports
+  if (isMixedReturn(p.flight)) {
+    parts.push(`returns ${p.flight.return_origin} to ${p.flight.return_destination}`);
+  }
+  parts.push(`$${p.price_usd}`);
   if (p.flight.airline) parts.push(p.flight.airline);
   const stops = stopsText(p.flight.stops);
   if (stops) parts.push(stops);
   return `${parts.join(', ')}.`;
 }
 
-// active point identity: series key + its outbound date (unique within a series).
+// active point identity: series key (for stale-card lookups when a series is toggled
+// off while its card is open) plus the point itself, sourced from the chart's own model.
 type ActivePoint = { key: string; point: GraphPoint };
-
-function isSamePoint(a: ActivePoint | null, key: string, p: GraphPoint): boolean {
-  return a !== null && a.key === key && a.point.outbound_date === p.outbound_date;
-}
-
-// touch devices synthesize a mouseenter right before click (W3C compat-event order), so a
-// naive hover-sets/click-toggles pair fights itself: first tap opens via hover, then the
-// click sees it already active and closes it. Gate hover on real hover capability so touch
-// relies on click alone; matchMedia is missing in jsdom, so default to hover-capable there.
-function supportsHover(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
-  return window.matchMedia('(hover: hover)').matches;
-}
 
 export function PriceGraph({ series }: { series: GraphSeries[] }) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
-  const [active, setActive] = useState<ActivePoint | null>(null);
   const visible = series.filter((s) => !hidden.has(s.key));
-  // a touch tap's mousedown focuses the (tabIndex 0) hit target, which fires onFocus and
-  // opens the card before click's own toggle runs — so toggle-close must key off whether
-  // the point was already active at pointerdown time, not at click time.
-  const wasActiveOnPointerDownRef = useRef(false);
-
-  // refs for measuring the real, rendered geometry of the card and its container so the
-  // flight card can be placed by actual pixels rather than fixed viewBox-percentage rules.
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [cardPos, setCardPos] = useState({ left: 0, top: 0 });
-
-  useEffect(() => {
-    if (!active) return;
-    // document-level because touch has no mouseleave — this is the only way to
-    // dismiss the card when the user taps elsewhere on the page.
-    function onPointerDown(e: PointerEvent) {
-      const target = e.target;
-      if (target instanceof Element && target.closest('.hit-target')) return;
-      setActive(null);
-    }
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [active]);
+  const { wrapRef, svgRef, cardRef, active, cardStyle, getHitTargetProps } =
+    useChartHoverCard<ActivePoint>();
 
   const model = useMemo(() => {
     const dates = [...new Set(visible.flatMap((s) => s.points.map((p) => p.outbound_date)))].sort();
@@ -113,59 +79,6 @@ export function PriceGraph({ series }: { series: GraphSeries[] }) {
     const xEvery = Math.ceil(dates.length / 8);
     return { dates, x, y, ticks, xEvery, plotW, plotH, cropped: lo > 0 };
   }, [visible]);
-
-  // the point's position as a fraction of the viewBox — plain numbers (not the `model`
-  // object, which `visible.filter(...)` above recreates on every render regardless of
-  // whether anything changed) so the effect below has stable dependencies and doesn't
-  // loop: recomputing on every render would re-run the effect, which calls setState,
-  // which re-renders, forever.
-  const activePointXFrac = model && active ? model.x(active.point.outbound_date) / W : null;
-  const activePointYFrac = model && active ? model.y(active.point.price_usd) / H : null;
-
-  // measure the rendered card and its container after the card mounts/updates but before
-  // the browser paints, so placement is correct on the first visible frame (no flash of a
-  // wrong position). jsdom's getBoundingClientRect always returns all-zero rects, so every
-  // input below is 0 there — the arithmetic must (and does) stay finite, never NaN.
-  useLayoutEffect(() => {
-    if (activePointXFrac === null || activePointYFrac === null) return;
-    const wrap = wrapRef.current;
-    const svg = svgRef.current;
-    const card = cardRef.current;
-    if (!wrap || !svg || !card) return;
-    const wrapRect = wrap.getBoundingClientRect();
-    const svgRect = svg.getBoundingClientRect();
-    const cardRect = card.getBoundingClientRect();
-    const gap = 14; // clearance between the point and the card, matches the old translate offset
-    const margin = 8; // keep the card off chart-wrap's own edges even when centered near them
-    // convert the point's viewBox-unit position to real px within chart-wrap, using the
-    // svg's actual rendered box rather than assuming it fills the container 1:1. left/top
-    // (as CSS values) are relative to chart-wrap's unscrolled content origin, but
-    // getBoundingClientRect gives the current *visible* (post-scroll) position — chart-wrap
-    // scrolls horizontally past its min-width 340px chart on phones under ~340px-wide, so the
-    // gap between those two frames (wrap.scrollLeft) has to be added back in, or the card
-    // renders scrollLeft px short of the point once the chart has been scrolled.
-    const px = svgRect.left - wrapRect.left + activePointXFrac * svgRect.width + wrap.scrollLeft;
-    const py = svgRect.top - wrapRect.top + activePointYFrac * svgRect.height;
-    // prefer above; only drop below when the card's real height doesn't fit above the
-    // container's top edge — replaces the old fixed "top quarter" heuristic.
-    const fitsAbove = py - cardRect.height - gap >= 0;
-    const rawTop = fitsAbove ? py - cardRect.height - gap : py + gap;
-    // final fallback: on a container too short for the card to fit either above or
-    // below, clamp top into the container's own bounds rather than let above/below
-    // math push it past the bottom (or, in principle, top) edge. The card may then
-    // partially cover the point it describes — acceptable; clipped card text is not.
-    const maxTop = Math.max(margin, wrapRect.height - cardRect.height - margin);
-    const top = clamp(rawTop, margin, maxTop);
-    // center on the point, then clamp using the card's real width against the
-    // container's real width so it can never clip past either edge. The clamp bounds are
-    // shifted by scrollLeft too, to stay in the same content-relative frame as px above —
-    // otherwise a scrolled chart-wrap would clamp against the unscrolled window instead of
-    // the one the user is actually looking at.
-    const minLeft = wrap.scrollLeft + margin;
-    const maxLeft = Math.max(minLeft, wrap.scrollLeft + wrapRect.width - cardRect.width - margin);
-    const left = clamp(px - cardRect.width / 2, minLeft, maxLeft);
-    setCardPos({ left, top });
-  }, [activePointXFrac, activePointYFrac]);
 
   const allDates = useMemo(
     () => [...new Set(series.flatMap((s) => s.points.map((p) => p.outbound_date)))].sort(),
@@ -269,11 +182,16 @@ export function PriceGraph({ series }: { series: GraphSeries[] }) {
                 <g key={s.key}>
                   {pts.length > 1 && (
                     <polyline
+                      className="trend-line"
                       points={d.join(' ')}
                       fill="none"
                       stroke={color}
                       strokeWidth={2}
                       strokeLinejoin="round"
+                      // feeds CSS currentColor for the dark-mode glow below — stroke is
+                      // an SVG paint attribute, not the CSS `color` property, so the
+                      // filter can't pick up this series' own hue without it.
+                      style={{ color }}
                     />
                   )}
                   {pts.map((p) => (
@@ -290,21 +208,14 @@ export function PriceGraph({ series }: { series: GraphSeries[] }) {
                         tabIndex={0}
                         role="button"
                         aria-label={describePoint(s, p)}
-                        onMouseEnter={() => { if (supportsHover()) setActive({ key: s.key, point: p }); }}
-                        onMouseLeave={() => { if (supportsHover()) setActive(null); }}
-                        onFocus={() => setActive({ key: s.key, point: p })}
-                        onBlur={() => setActive(null)}
-                        onPointerDown={() => {
-                          wasActiveOnPointerDownRef.current = isSamePoint(active, s.key, p);
-                        }}
-                        onClick={() =>
-                          setActive(
-                            wasActiveOnPointerDownRef.current ? null : { key: s.key, point: p },
-                          )
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === 'Escape') setActive(null);
-                        }}
+                        // item key combines series + date (unique within a series) so the hook
+                        // can tell distinct points apart for open/close toggling and dismissal.
+                        {...getHitTargetProps(
+                          `${s.key}:${p.outbound_date}`,
+                          { key: s.key, point: p },
+                          model.x(p.outbound_date) / W,
+                          model.y(p.price_usd) / H,
+                        )}
                       />
                     </g>
                   ))}
@@ -332,15 +243,11 @@ export function PriceGraph({ series }: { series: GraphSeries[] }) {
             const flight = active.point.flight;
             const color = PALETTE[series.indexOf(activeSeries) % PALETTE.length];
             const stops = stopsText(flight.stops);
-            // left/top are real px computed from measured geometry in the layout effect
-            // above (0/0 — and thus finite, not NaN — until that effect has run once, e.g.
-            // in jsdom where getBoundingClientRect never reports real size).
+            // cardStyle's left/top are real px computed from measured geometry in the hook's
+            // layout effect (0/0 — and thus finite, not NaN — until that effect has run once,
+            // e.g. in jsdom where getBoundingClientRect never reports real size).
             return (
-              <div
-                ref={cardRef}
-                className="flight-card"
-                style={{ left: `${cardPos.left}px`, top: `${cardPos.top}px` }}
-              >
+              <div ref={cardRef} className="flight-card" style={cardStyle}>
                 <p className="fc-head">
                   <span>
                     {activeSeries.origin}→{activeSeries.destination}
@@ -365,7 +272,16 @@ export function PriceGraph({ series }: { series: GraphSeries[] }) {
                 )}
                 {flight.return_dep_time && flight.return_arr_time && (
                   <p>
-                    ret {formatTimeOfDay(flight.return_dep_time)} –{' '}
+                    {/* mixed flights get a signal-colored "ret ORIGIN→DEST" segment in place
+                        of the plain "ret" word, so the card doesn't imply a symmetric return */}
+                    {isMixedReturn(flight) ? (
+                      <span className="ret-airports">
+                        ret {flight.return_origin}→{flight.return_destination}
+                      </span>
+                    ) : (
+                      'ret'
+                    )}{' '}
+                    {formatTimeOfDay(flight.return_dep_time)} –{' '}
                     {formatTimeOfDay(flight.return_arr_time)}
                   </p>
                 )}
@@ -374,11 +290,9 @@ export function PriceGraph({ series }: { series: GraphSeries[] }) {
           })()}
       </div>
 
-      <details style={{ marginTop: '0.6rem' }}>
-        <summary className="muted" style={{ cursor: 'pointer', fontSize: '0.82rem' }}>
-          View as data table
-        </summary>
-        <div className="chart-wrap" style={{ marginTop: '0.5rem' }}>
+      <details className="chart-disclosure">
+        <summary className="muted">View as data table</summary>
+        <div className="chart-wrap">
           <table className="data">
             <caption>Lowest round-trip price (USD) by outbound date</caption>
             <thead>

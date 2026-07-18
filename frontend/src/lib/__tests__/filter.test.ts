@@ -25,6 +25,8 @@ function snap(p: Partial<PriceSnapshot>): PriceSnapshot {
     return_flight_numbers: null,
     outbound_stops: null,
     return_stops: null,
+    return_origin: null,
+    return_destination: null,
     ...p,
   };
 }

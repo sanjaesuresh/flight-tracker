@@ -104,6 +104,12 @@ describe('/api/option-history', () => {
     expect(payload.option.return_dep_time).toMatch(/^\d{2}:\d{2}$/);
     expect(payload.option.outbound_airline).toBeTruthy();
     expect(payload.option.outbound_flight_numbers).toBeTruthy();
+    // symmetric seed itineraries mirror the return leg's real airports
+    // (destination/origin reversed) — this identity picks one of the plain
+    // A/B itineraries, never the dedicated mixed-route row (too few readings
+    // to win the highest-n query above)
+    expect(payload.option.return_origin).toBe(id.destination);
+    expect(payload.option.return_destination).toBe(id.origin);
 
     // one point per seeded row for this key, oldest first, numeric prices
     expect(payload.points.length).toBe(id.n);

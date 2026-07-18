@@ -59,7 +59,8 @@ const SNAPSHOT_COLS = `
   booking_url,
   itinerary_key, outbound_airline, return_airline,
   outbound_flight_numbers, return_flight_numbers,
-  outbound_stops, return_stops`;
+  outbound_stops, return_stops,
+  return_origin, return_destination`;
 
 // Latest snapshot per (origin,destination,outbound_date,return_date) within the
 // rolling window [NY today, NY today + window_days]. DISTINCT ON keeps the newest.

@@ -113,6 +113,11 @@ interface SeedRow {
   retFlights: string | null;
   outStops: number | null;
   retStops: number | null;
+  // mixed-route visibility — the return leg's own actual airports. Mirrored
+  // (destination/origin) for the fli-style rows below; null for the
+  // fast-flights fallback row, matching real poller behavior (Task 1).
+  returnOrigin: string | null;
+  returnDestination: string | null;
 }
 
 async function insertSnapshot(pg: PGlite, r: SeedRow): Promise<void> {
@@ -124,10 +129,10 @@ async function insertSnapshot(pg: PGlite, r: SeedRow): Promise<void> {
         airline, stops, outbound_dep_time, outbound_arr_time, return_dep_time,
         return_arr_time, booking_url, itinerary_key, outbound_airline,
         return_airline, outbound_flight_numbers, return_flight_numbers,
-        outbound_stops, return_stops)
+        outbound_stops, return_stops, return_origin, return_destination)
      VALUES (${r.scrapeAgo}, $1, $2, $3::date, $4::date,
        $5, $6, $7, $8::time, $9::time, $10::time, $11::time, $12, $13, $14, $15,
-       $16, $17, $18, $19)`,
+       $16, $17, $18, $19, $20, $21)`,
     [
       r.origin,
       r.destination,
@@ -148,6 +153,8 @@ async function insertSnapshot(pg: PGlite, r: SeedRow): Promise<void> {
       r.retFlights,
       r.outStops,
       r.retStops,
+      r.returnOrigin,
+      r.returnDestination,
     ],
   );
 }
@@ -161,8 +168,15 @@ async function insertSnapshot(pg: PGlite, r: SeedRow): Promise<void> {
 //     on the board so the per-direction airline filter matters in dev.
 //   - i==7: ONE itinerary with a single reading — the detail page's sparse
 //     "just started tracking" state, reachable straight from the board.
+//   - i==10 (LGA->YYZ, first date pair): a dedicated MIXED-ROUTE itinerary —
+//     the nominal pair is LGA->YYZ, but the return leg actually lands JFK
+//     (not LGA) after departing YTZ (not YYZ). It's the sole itinerary for
+//     this slot so it always wins the board's DISTINCT-ON, exercising the
+//     mixed-route UI (fare board, hover card, detail page) in dev.
 //   - i==13: a fast-flights fallback row — null itinerary_key, null return
 //     times, no per-direction fields — the board's no-detail-link + "n/a" path.
+//     return_origin/return_destination are null here too, same as real
+//     fast-flights rows (only the fli path ever populates them).
 // Phase 1 rule stays intact: booking_url is a real dated Google Flights query
 // (never `?ref=`), and the i%7==6 pairs (6 and 13) carry a null booking_url.
 async function seedSnapshots(pg: PGlite, agoExpr: string): Promise<void> {
@@ -197,10 +211,15 @@ async function seedSnapshots(pg: PGlite, agoExpr: string): Promise<void> {
           retDep,
           retArr,
           booking,
+          // fli-style rows mirror the outbound pair on the return leg by
+          // default; the mixed-route branch below overrides this pair.
+          returnOrigin: destination,
+          returnDestination: origin,
         };
 
         if (i === 13) {
-          // fast-flights fallback: no per-option identity, no return times
+          // fast-flights fallback: no per-option identity, no return times,
+          // and no return-leg airports (fast-flights never reports them)
           for (const [scrapeAgo, p] of [
             [`${agoExpr} - interval '6 hours'`, price + 15],
             [agoExpr, price],
@@ -220,6 +239,36 @@ async function seedSnapshots(pg: PGlite, agoExpr: string): Promise<void> {
               retFlights: null,
               outStops: null,
               retStops: null,
+              returnOrigin: null,
+              returnDestination: null,
+            });
+          }
+        } else if (i === 10) {
+          // MIXED-ROUTE: sole itinerary for this slot (LGA->YYZ, first date
+          // pair) so it always wins the board's latest-per-pair pick. Return
+          // leg actually departs YTZ and lands JFK — per-leg carriers/times
+          // differ too, so every mixed-route surface has real data to render.
+          const dips: Array<[number, number]> = [
+            [3, 15],
+            [1, 8],
+            [0, 0],
+          ];
+          for (const [hoursAgo, delta] of dips) {
+            await insertSnapshot(pg, {
+              ...common,
+              scrapeAgo: hoursAgo === 0 ? agoExpr : `${agoExpr} - interval '${hoursAgo} hours'`,
+              price: price + delta,
+              airline: `${AIRLINES[i % 4]} / ${AIRLINES[(i + 1) % 4]}`,
+              stops: 0,
+              itineraryKey: `${CODES[i % 4]}${5500 + i}.${outboundDate}|${CODES[(i + 1) % 4]}${6600 + i}.${returnDate}`,
+              outAirline: AIRLINES[i % 4],
+              retAirline: AIRLINES[(i + 1) % 4],
+              outFlights: String(5500 + i),
+              retFlights: String(6600 + i),
+              outStops: 0,
+              retStops: 0,
+              returnOrigin: 'YTZ',
+              returnDestination: 'JFK',
             });
           }
         } else if (i === 7) {

@@ -9,6 +9,7 @@ import { applyFilters, buildSeries, distinctAirlines, emptyFilter, rankOptions }
 import { deriveHealth } from '../lib/health.js';
 import { formatFlightDate } from '../lib/timezone.js';
 import { optionHashFor } from '../lib/route.js';
+import { BookingLink } from '../components/BookingLink.tsx';
 import { CheapestList } from '../components/CheapestList.tsx';
 import { Filters } from '../components/Filters.tsx';
 import { PriceGraph } from '../components/PriceGraph.tsx';
@@ -19,6 +20,20 @@ import {
   LoadingState,
   StaleBanner,
 } from '../components/state/States.tsx';
+
+// One-time settle-in for the hero fare: each character gets its own span so the
+// perforated stub's rotateX flip can stagger across "$185" instead of animating
+// the string as one flat block. Purely decorative (the wrapping .fare-display is
+// aria-hidden) — the accessible amount is the plain-text .amount sibling right
+// beside it, so screen readers and the existing `.amount` test selector both see
+// the price as a single unbroken token regardless of this per-digit markup.
+function fareDigits(text: string) {
+  return text.split('').map((ch, i) => (
+    <span key={i} className="fare-digit" style={{ animationDelay: `${i * 45}ms` }}>
+      {ch}
+    </span>
+  ));
+}
 
 type Status = 'loading' | 'error' | 'ready';
 interface Data {
@@ -120,47 +135,50 @@ export function Dashboard() {
           <div className="stack">
             {lowest && (
               <div className="hero">
-                <div className="field-label" style={{ flexBasis: '100%' }}>
-                  Lowest right now
-                </div>
-                <div className="hero-main">
-                  <span className="amount">${lowest.price_usd}</span>
-                  <div>
-                    <div className="hero-route">
-                      {lowest.origin} → {lowest.destination}
-                    </div>
-                    <div className="hero-meta">
-                      {formatFlightDate(lowest.outbound_date)} – {formatFlightDate(lowest.return_date)}
-                      {' · '}
-                      {lowest.airline ?? 'Airline n/a'}
-                      {lowest.stops === 0 ? ' · nonstop' : ''}
-                      {/* detail link only when the row has a per-option identity */}
-                      {optionHashFor(lowest) && (
-                        <>
-                          {' · '}
-                          <a className="detail-link" href={optionHashFor(lowest)!}>
-                            Price history
-                          </a>
-                        </>
-                      )}
-                    </div>
+                {/* ticket-main: the boarding-pass "info panel" half of the ticket —
+                    kicker, route, dates/meta, booking action */}
+                <div className="ticket-main">
+                  <div className="field-label">Lowest right now</div>
+                  <div className="hero-route">
+                    {lowest.origin} → {lowest.destination}
                   </div>
+                  <div className="hero-meta">
+                    {formatFlightDate(lowest.outbound_date)} – {formatFlightDate(lowest.return_date)}
+                    {' · '}
+                    {lowest.airline ?? 'Airline n/a'}
+                    {lowest.stops === 0 ? ' · nonstop' : ''}
+                    {/* detail link only when the row has a per-option identity */}
+                    {optionHashFor(lowest) && (
+                      <>
+                        {' · '}
+                        <a className="detail-link" href={optionHashFor(lowest)!}>
+                          Price history
+                        </a>
+                      </>
+                    )}
+                  </div>
+                  {/* booking_url used verbatim; omitted entirely when the row has none */}
+                  {lowest.booking_url && <BookingLink url={lowest.booking_url} />}
                 </div>
-                {/* booking_url used verbatim; omitted entirely when the row has none */}
-                {lowest.booking_url && (
-                  <a
-                    className="btn btn-primary hero-book"
-                    href={lowest.booking_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    View on Google Flights
-                  </a>
-                )}
+                {/* fare-stub: the tear-off half of the ticket — perforation + two
+                    punched notches, the fare itself set in the display face */}
+                <div className="fare-stub">
+                  <span className="fare-notch fare-notch-top" aria-hidden="true" />
+                  <span className="fare-notch fare-notch-bottom" aria-hidden="true" />
+                  <span className="fare-display" aria-hidden="true">
+                    {fareDigits(`$${lowest.price_usd}`)}
+                  </span>
+                  {/* the real accessible text: visually hidden (not aria-hidden), so
+                      it stays in the a11y tree and keeps matching the existing
+                      `.amount` test selector as one plain "$185" text node */}
+                  <span className="amount sr-only">${lowest.price_usd}</span>
+                </div>
               </div>
             )}
 
-            <section className="panel panel-pad" aria-labelledby="graph-h">
+            {/* trend above the board by user preference; panel-quiet keeps its
+                visual weight below the board's heavy housing either way */}
+            <section className="panel panel-pad panel-quiet" aria-labelledby="graph-h">
               <div className="section-head">
                 <h2 id="graph-h">Price trend</h2>
                 <span className="field-label">Lowest round-trip by date</span>

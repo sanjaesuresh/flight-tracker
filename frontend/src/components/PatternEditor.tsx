@@ -49,7 +49,7 @@ function TimeWindow({
   onEnd: (v: string | null) => void;
 }) {
   return (
-    <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+    <fieldset className="field fieldset-reset">
       <legend className="legend-label">
         {label} <span className="muted">(blank = any time)</span>
       </legend>

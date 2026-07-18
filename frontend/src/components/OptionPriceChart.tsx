@@ -7,6 +7,7 @@
 import { useMemo } from 'react';
 import type { HistoryPoint } from '../lib/types.js';
 import { formatShortTimestamp, formatTimestamp, NY_TZ } from '../lib/timezone.js';
+import { useChartHoverCard } from './useChartHoverCard.ts';
 
 const W = 760;
 const H = 280;
@@ -33,7 +34,32 @@ function formatXTick(iso: string, prevIso: string | null): string {
   return formatShortTimestamp(iso);
 }
 
+// signed dollar delta vs the previous check, in the app's wording. A negative
+// delta reads as good news (the price fell) even though the number itself is
+// negative, so callers must not print the raw sign — this owns the wording.
+function describeDelta(delta: number): string {
+  if (delta < 0) return `down $${Math.abs(delta)} since the last check`;
+  if (delta > 0) return `up $${delta} since the last check`;
+  return 'unchanged since the last check';
+}
+
+// active point identity: the reading itself plus the prior reading (null for the
+// very first one), sourced once here so both the aria-label and the card can
+// reuse the same delta math without re-searching the sorted points array.
+type ActivePoint = { point: HistoryPoint; prev: HistoryPoint | null };
+
+// one plain sentence for the hit target's aria-label: check time, price, and —
+// when there is a prior reading — the delta. Screen readers get this in place
+// of the removed <title>, since the card itself is visual/pointer-inert.
+function describePoint(p: HistoryPoint, prev: HistoryPoint | null): string {
+  const parts = [`Checked ${formatTimestamp(p.scraped_at)}`, `$${p.price_usd}`];
+  if (prev) parts.push(describeDelta(p.price_usd - prev.price_usd));
+  return `${parts.join(', ')}.`;
+}
+
 export function OptionPriceChart({ points, label }: { points: HistoryPoint[]; label: string }) {
+  const { wrapRef, svgRef, cardRef, active, cardStyle, getHitTargetProps } =
+    useChartHoverCard<ActivePoint>();
   const model = useMemo(() => {
     if (points.length < 2) return null;
     const pts = [...points].sort((a, b) => a.scraped_at.localeCompare(b.scraped_at));
@@ -104,9 +130,10 @@ export function OptionPriceChart({ points, label }: { points: HistoryPoint[]; la
 
   return (
     <div>
-      <div className="chart-wrap">
+      <div className="chart-wrap" ref={wrapRef}>
         {model && (
           <svg
+            ref={svgRef}
             className="chart"
             viewBox={`0 0 ${W} ${H}`}
             role="img"
@@ -162,28 +189,63 @@ export function OptionPriceChart({ points, label }: { points: HistoryPoint[]; la
               strokeWidth={2}
               strokeLinejoin="round"
             />
-            {model.pts.map((p) => (
-              <circle
-                key={p.scraped_at}
-                className="series-dot"
-                cx={model.x(p.scraped_at)}
-                cy={model.y(p.price_usd)}
-                r={3}
-              >
-                <title>
-                  {formatTimestamp(p.scraped_at)}: ${p.price_usd}
-                </title>
-              </circle>
-            ))}
+            {model.pts.map((p, i) => {
+              const prev = i > 0 ? model.pts[i - 1] : null;
+              return (
+                <g key={p.scraped_at}>
+                  <circle
+                    className="series-dot"
+                    cx={model.x(p.scraped_at)}
+                    cy={model.y(p.price_usd)}
+                    r={3}
+                  />
+                  {/* transparent, oversized hit target (r=12 vs the r=3 dot) so touch/mouse/
+                      keyboard all get a real target; the card + aria-label replace the old <title> */}
+                  <circle
+                    className="hit-target"
+                    cx={model.x(p.scraped_at)}
+                    cy={model.y(p.price_usd)}
+                    r={12}
+                    fill="transparent"
+                    tabIndex={0}
+                    role="button"
+                    aria-label={describePoint(p, prev)}
+                    {...getHitTargetProps(
+                      p.scraped_at,
+                      { point: p, prev },
+                      model.x(p.scraped_at) / W,
+                      model.y(p.price_usd) / H,
+                    )}
+                  />
+                </g>
+              );
+            })}
           </svg>
         )}
+        {model && active && (() => {
+          const delta = active.prev ? active.point.price_usd - active.prev.price_usd : null;
+          // delta < 0 means the price fell since the last check, which is good news for
+          // someone tracking a fare — hence good/bad map to falling/rising, not the sign.
+          const deltaClass = delta === null || delta === 0 ? '' : delta < 0 ? 'good' : 'bad';
+          return (
+            <div ref={cardRef} className="flight-card" style={cardStyle}>
+              <p className="fc-head">
+                <span>{formatTimestamp(active.point.scraped_at)}</span>
+                <span style={{ color: 'var(--signal)' }}>${active.point.price_usd}</span>
+              </p>
+              {delta !== null && (
+                <p className={deltaClass ? `fc-delta ${deltaClass}` : 'fc-delta'}>
+                  {describeDelta(delta)}
+                </p>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
-      <details style={{ marginTop: '0.6rem' }}>
-        <summary className="muted" style={{ cursor: 'pointer', fontSize: '0.82rem' }}>
-          View as data table
-        </summary>
-        <div className="chart-wrap" style={{ marginTop: '0.5rem' }}>
+      <details className="chart-disclosure">
+        <summary className="muted">View as data table</summary>
+        <div className="chart-wrap">
           <table className="data">
             <caption>Tracked price (USD) by check time for {label}</caption>
             <thead>

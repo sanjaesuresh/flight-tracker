@@ -99,6 +99,10 @@ catch-all), but the included config targets Vercel.
 - All settings writes go through the same validator the poller uses
   (`src/lib/settingsSchema.ts`, mirroring `poller/db.py:parse_settings`), on both the
   form and the server, so the form can never persist a value the poller would reject.
+- Price snapshots now carry `return_origin` and `return_destination` (nullable) — the first
+  return leg's departure airport and last return leg's arrival airport. The "mixed" indicator
+  (return pair differs from reversed outbound) is derived at display time, not stored. Both
+  fields are airport codes (non-personal data) and are included in anonymous/public reads.
 
 ## Responsive behavior
 

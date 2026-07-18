@@ -85,3 +85,12 @@ function parseOptionHashParams(hash: string): OptionParams | null {
 export function cameFromBoard(): boolean {
   return previousWasBoard;
 }
+
+// The single definition of "mixed" round trip, shared by every display surface:
+// the return leg's own airports are known AND at least one differs from the
+// outbound pair. Nulls (old rows, fast-flights fallback) are never mixed — there's
+// simply no return-leg airport data to compare, not evidence of a symmetric trip.
+export function isMixedReturn(s: PriceSnapshot): boolean {
+  if (s.return_origin === null || s.return_destination === null) return false;
+  return s.return_origin !== s.destination || s.return_destination !== s.origin;
+}

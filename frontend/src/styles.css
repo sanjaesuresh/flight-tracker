@@ -25,10 +25,13 @@
   --signal-2: #a83c0e;
   --signal-tint: #f0dccf;
   --good: #1c7a42;
-  --good-tint: #d9e7dc;
   --bad: #bd3325;
   --bad-tint: #eed8d3;
   --led-glow: 0 0 0 rgba(0, 0, 0, 0);
+  /* faint paper-fiber noise for the body background: feTurbulence alpha-clamped to 0.05
+     max (well below the ~7% delta a human eye reliably registers on a flat fill), so it
+     never shifts any of this file's verified WCAG ratios — texture only, not a color. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 
   /* text color safe on a --signal background */
   --on-signal: #ffffff;
@@ -60,10 +63,14 @@
     --signal-2: #ffb457;
     --signal-tint: #241a0f;
     --good: #35d17d;
-    --good-tint: #10251a;
     --bad: #ff5a4a;
     --bad-tint: #2a1512;
     --led-glow: 0 0 8px;
+    /* subtler dot-matrix grain (flat 0.03 alpha, below the light theme's 0.05 turbulence
+       cap) — the departures-board glass reads darker/flatter than paper stock, so a busier
+       texture would read as noise rather than material. Same "no contrast impact" note as
+       the light --grain above: alpha is far under any perceptual/WCAG threshold. */
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='5' height='5'%3E%3Ccircle cx='1' cy='1' r='0.55' fill='%23ffffff' fill-opacity='0.03'/%3E%3C/svg%3E");
 
     /* text color safe on a --signal background; reuses --paper's ink-inversion value */
     --on-signal: #0a0d13;
@@ -89,10 +96,10 @@
   --signal-2: #a83c0e;
   --signal-tint: #f0dccf;
   --good: #1c7a42;
-  --good-tint: #d9e7dc;
   --bad: #bd3325;
   --bad-tint: #eed8d3;
   --led-glow: 0 0 0 rgba(0, 0, 0, 0);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 
   --on-signal: #ffffff;
   --signal-text: #9a380e;
@@ -114,10 +121,10 @@
   --signal-2: #ffb457;
   --signal-tint: #241a0f;
   --good: #35d17d;
-  --good-tint: #10251a;
   --bad: #ff5a4a;
   --bad-tint: #2a1512;
   --led-glow: 0 0 8px;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='5' height='5'%3E%3Ccircle cx='1' cy='1' r='0.55' fill='%23ffffff' fill-opacity='0.03'/%3E%3C/svg%3E");
 
   --on-signal: #0a0d13;
   --signal-text: #ff9d2b;
@@ -135,7 +142,8 @@ html {
 body {
   margin: 0;
   font-family: var(--f-body);
-  background: var(--paper);
+  /* single declaration: solid --paper, faint tiled --grain noise laid over it */
+  background: var(--paper) var(--grain);
   color: var(--ink);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -247,6 +255,14 @@ a {
   align-items: center;
   gap: 0.15rem;
 }
+/* positioning context for the sliding indicator below — scoped to just the two
+   tab buttons (not the whole .nav) so "Sign out" appearing/disappearing next to
+   them can never shift the indicator's measured geometry. */
+.tab-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
 .tab {
   appearance: none;
   border: 0;
@@ -261,11 +277,23 @@ a {
 }
 .tab[aria-current='page'] {
   color: var(--ink);
-  border-bottom-color: var(--signal);
   font-weight: 600;
 }
 .tab:hover {
   color: var(--ink);
+}
+/* the one moving line: real left/width come from App.tsx's measured layout effect
+   (0/0 — and thus a harmless zero-width line at the track's own left edge — until
+   that effect has run once, e.g. jsdom where getBoundingClientRect never reports
+   real size). Replaces the old static per-tab border-bottom-color. */
+.tab-indicator {
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  height: 2px;
+  background: var(--signal);
+  transition: transform 0.2s ease-out, width 0.2s ease-out;
+  pointer-events: none;
 }
 
 /* below 680px: hide the wordmark and compact the row so logo + route badge + nav fit */
@@ -313,10 +341,15 @@ a {
   padding: 0.5rem 0.95rem;
   border-radius: 3px;
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease, transform 0.1s ease-out;
 }
 .btn:hover {
   border-color: var(--ink);
+}
+/* press state: a 1px nudge reads as a physical button depressing, not a layout
+   shift — transform only, so it never triggers reflow. */
+.btn:active {
+  transform: translateY(1px);
 }
 .btn:disabled {
   opacity: 0.45;
@@ -401,6 +434,14 @@ input[aria-invalid='true'] {
   flex-direction: column;
   gap: 0.28rem;
 }
+/* strips native <fieldset> chrome so it can stand in for a plain grouping wrapper
+   (Filters/SettingsForm/PatternEditor all group inputs under a <fieldset><legend>
+   for a11y, but want zero visual footprint) — was 9 duplicated inline styles */
+.fieldset-reset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
 .field .hint {
   font-size: 0.75rem;
   color: var(--faint);
@@ -419,6 +460,13 @@ input[aria-invalid='true'] {
 }
 .panel-pad {
   padding: 1.15rem 1.25rem;
+}
+/* the trend chart is supporting context, not the page's content — a quieter
+   fill (mixed toward --paper rather than the flat --surface every other panel
+   uses) keeps the hierarchy reading hero → board → chart instead of two panels
+   competing at the same weight. Border stays the plain 1px .panel rule. */
+.panel-quiet {
+  background: color-mix(in srgb, var(--surface) 60%, var(--paper) 40%);
 }
 /* desktop padding wastes space at phone widths */
 @media (max-width: 680px) {
@@ -447,42 +495,27 @@ input[aria-invalid='true'] {
   gap: 1.25rem;
 }
 
-/* ── hero: lowest right now ─────────────────────────────────────────────── */
+/* ── hero: boarding-pass ticket ("lowest right now" / "tracked option") ────
+   ticket-main is the info-panel half; fare-stub is the tear-off half, split by
+   a dashed perforation with two punched notch circles. The old 6px signal rail
+   (.hero::before) is gone — a colored side-stripe is a banned pattern; the
+   stub's own signal-colored fare now carries that weight instead. */
 .hero {
   border: 2px solid var(--line);
   border-radius: 4px;
   background: var(--surface);
-  padding: 1.1rem 1.35rem;
   display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  flex-wrap: wrap;
+  align-items: stretch;
   position: relative;
-  overflow: hidden;
 }
-.hero::before {
-  /* the signal rail down the left edge — the board's live line */
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 6px;
-  background: var(--signal);
-  box-shadow: var(--led-glow) var(--signal);
-}
-.hero-main {
+.ticket-main {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
-  align-items: baseline;
-  gap: 0.9rem;
-  flex-wrap: wrap;
-}
-.hero .amount {
-  font-family: var(--f-mono);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  font-size: clamp(2.4rem, 6vw, 3.4rem);
-  line-height: 0.9;
-  color: var(--signal);
-  letter-spacing: -0.02em;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 1.1rem 1.35rem;
 }
 .hero .hero-route {
   font-family: var(--f-mono);
@@ -494,11 +527,158 @@ input[aria-invalid='true'] {
   color: var(--muted);
   font-size: 0.9rem;
 }
-.hero .hero-book {
-  margin-left: auto;
+
+/* the tear-off stub: perforation + two punched notches + the display-face fare.
+   Fixed-ish width on the right at ≥480px; becomes a full-width bottom band
+   below that (see the max-width: 480px block further down). */
+.fare-stub {
+  position: relative;
+  flex: none;
+  width: clamp(9rem, 24vw, 12.5rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 1rem 1.1rem;
+  text-align: center;
+}
+.fare-stub::before {
+  /* the perforation: a dashed tear line between the ticket's two halves */
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-left: 1px dashed var(--rule-strong);
+}
+/* punched die-cut circles: paper-colored so the page shows through, straddling
+   the card's own top/bottom edge right at the perforation — the classic
+   ticket-stub notch. Decorative (aria-hidden in markup), so WCAG's non-text
+   contrast rule (1.4.11) doesn't apply to it. */
+.fare-notch {
+  position: absolute;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  z-index: 1;
+}
+.fare-notch-top {
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+.fare-notch-bottom {
+  bottom: 0;
+  transform: translate(-50%, 50%);
+}
+.fare-display {
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: clamp(2.2rem, 7vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  /* --signal-text is pre-verified >=4.5:1 on paper/surface/surface-2/signal-tint
+     in both themes (see .btn-row-signal above) — same token, same guarantee */
+  color: var(--signal-text);
+}
+/* one-time settle-in per character, staggered by JSX-set animation-delay
+   (i * 45ms); "backwards" fill holds each digit at its 0% (invisible/tipped)
+   state until its own delay elapses instead of flashing visible early */
+.fare-digit {
+  display: inline-block;
+  transform-origin: 50% 100%;
+  animation: fare-settle 260ms ease-out backwards;
+}
+@keyframes fare-settle {
+  from {
+    opacity: 0;
+    transform: rotateX(80deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotateX(0deg);
+  }
+}
+/* a one-time load animation is still motion — drop it entirely (not just
+   shorten it) under reduced motion, per this file's usual policy */
+@media (prefers-reduced-motion: reduce) {
+  .fare-digit {
+    animation: none;
+  }
+}
+
+/* OptionDetail's echo of the same ticket composition, dialed down: a "tracked
+   option" makes no lowest-fare claim, so its stub carries no badge — just a
+   smaller fare (its own real "at its low" flag lives in the stat grid below,
+   driven by an actual history comparison, not restated here). */
+.hero--compact .fare-display {
+  font-size: clamp(1.7rem, 5vw, 2.2rem);
+}
+/* the settle-in flip is a one-time "welcome" moment worth staging on the
+   Dashboard hero, which is the page's single headline number. This page's
+   fare is reached by a fresh per-option fetch/render on every navigation
+   (StrictMode's dev double-effect, plus the focus-management effect on the
+   heading, plus the price chart below all landing in the same commit) —
+   more incidental main-thread work sharing the animation's short live
+   window than the Dashboard hero ever has, for a flourish that's optional
+   here. Rather than risk the digits painting mid-flip, skip the animation
+   outright and render them already settled. */
+.hero--compact .fare-digit {
+  animation: none;
+}
+
+/* below 480px the stub can't hold a legible fare beside a full route line — it
+   drops under ticket-main as a full-width band, and the perforation/notches
+   rotate 90° to match: a horizontal tear line with notches on the left/right
+   edges instead of a vertical one with notches on top/bottom. */
+@media (max-width: 480px) {
+  .hero {
+    flex-direction: column;
+  }
+  .fare-stub {
+    width: 100%;
+    flex-direction: row;
+    gap: 1rem;
+    padding: 0.9rem 1.1rem;
+  }
+  .fare-stub::before {
+    inset: 0 0 auto 0;
+    border-left: 0;
+    border-top: 1px dashed var(--rule-strong);
+  }
+  .fare-notch-top,
+  .fare-notch-bottom {
+    top: 0;
+    bottom: auto;
+  }
+  .fare-notch-top {
+    left: 0;
+    transform: translate(-50%, -50%);
+  }
+  .fare-notch-bottom {
+    left: auto;
+    right: 0;
+    transform: translate(50%, -50%);
+  }
 }
 
 /* ── fare board (cheapest list) ─────────────────────────────────────────── */
+/* the board is the page's real content, so it gets the heaviest frame on the
+   page — a dedicated housing rather than the generic .panel recipe (shared
+   below with the board-state screens, which get the same frame treatment). */
+.board-house,
+.state,
+.sparse-history {
+  border: 2px solid var(--rule-strong);
+  border-radius: 6px;
+}
+/* only the board housing needs to clip its child (the table's square corners
+   against the frame's rounded ones) — .state/.sparse-history hold plain text */
+.board-house {
+  overflow: hidden;
+}
 .board {
   width: 100%;
   border-collapse: collapse;
@@ -513,12 +693,23 @@ input[aria-invalid='true'] {
   color: var(--faint);
   text-align: left;
   padding: 0 0.85rem 0.55rem;
-  border-bottom: 2px solid var(--line);
+  /* a double rule reads as a board's own printed header divider, heavier than
+     the single 1px row rules below it */
+  border-bottom: 3px double var(--line);
 }
 .board tbody td {
   padding: 0.8rem 0.85rem;
   border-bottom: 1px solid var(--rule);
   vertical-align: middle;
+}
+/* dark "departures board" glass only: tint the row separators toward the amber
+   signal so the field reads lit rather than neutral-gray; light "ticket stock"
+   keeps the plain paper-toned rule (color-mix, not a token swap, so it stays a
+   subtle cast rather than a second rule color to maintain) */
+@media (prefers-color-scheme: dark) {
+  .board tbody td {
+    border-bottom-color: color-mix(in srgb, var(--rule) 86%, var(--signal) 14%);
+  }
 }
 .board tbody tr {
   transition: background 0.1s ease;
@@ -573,6 +764,16 @@ input[aria-invalid='true'] {
   border-radius: 2px;
   margin-left: 0.55rem;
   vertical-align: middle;
+}
+/* the board's own LOWEST flag reads as a stamped tag — canted and slightly
+   heavier-bordered than the plain .flag base above. Scoped to the board (not
+   the bare .flag class, which OptionDetail's stat-grid also uses for its own
+   "At its low" badge) so the stamp treatment stays this component's own move;
+   .tag (the stops pill next to it) is a different class and is untouched, so
+   it stays upright as required. */
+.board .flag {
+  border-width: 1.5px;
+  transform: rotate(-2deg);
 }
 .c-dates {
   white-space: nowrap;
@@ -649,10 +850,13 @@ input[aria-invalid='true'] {
   padding: 0.3rem 0.55rem;
   color: var(--ink);
   background: var(--surface);
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.1s ease-out;
 }
 .btn-row:hover {
   border-color: var(--ink);
+}
+.btn-row:active {
+  transform: translateY(1px);
 }
 /* signal-colored: --signal-text is pre-verified >=4.5:1 on paper/surface/
    surface-2/signal-tint in both themes, which is every background this
@@ -676,6 +880,12 @@ input[aria-invalid='true'] {
 
 /* stacked board rows on small screens (classic responsive table) */
 @media (max-width: 680px) {
+  /* the housing has no padding of its own at desktop (the table's cell padding
+     is its gutter) — the stacked cards need a small one so they don't sit flush
+     against the 2px frame edge */
+  .board-house {
+    padding: 0.6rem;
+  }
   .board thead {
     position: absolute;
     width: 1px;
@@ -878,6 +1088,10 @@ input[aria-invalid='true'] {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  transition: transform 0.1s ease-out;
+}
+.chip:active {
+  transform: translateY(1px);
 }
 .chip .swatch {
   width: 9px;
@@ -897,6 +1111,19 @@ input[aria-invalid='true'] {
   background: transparent;
   /* --line is only ~1.5:1 on dark --surface; --muted clears 3:1 UI-glyph floor in both themes */
   border: 1px solid var(--muted);
+}
+
+/* the "View as data table" disclosure below a chart — identical inline styles were
+   duplicated across PriceGraph and OptionPriceChart; one class now covers both. */
+.chart-disclosure {
+  margin-top: 0.6rem;
+}
+.chart-disclosure summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+.chart-disclosure .chart-wrap {
+  margin-top: 0.5rem;
 }
 
 /* data table (chart alt) */
@@ -927,12 +1154,21 @@ table.data td.num {
 }
 
 /* ── option detail ──────────────────────────────────────────────────────── */
-/* single-series history line draws in the board's signal color */
+/* single-series history line draws in the board's signal color. --led-glow is the
+   0-in-light / 8px-in-dark token used elsewhere for LED-style elements (.pref-dot,
+   .status .led) — referencing it here needs no dark-mode media query of its own:
+   the token itself is already a no-op glow in light (matte) and a real one in dark. */
 .chart .series-line {
   stroke: var(--signal);
+  filter: drop-shadow(var(--led-glow) var(--signal));
 }
 .chart .series-dot {
   fill: var(--signal);
+}
+/* PriceGraph's multi-series lines: each glows in its own hue (currentColor, set
+   inline per polyline) rather than the single board signal color above. */
+.chart .trend-line {
+  filter: drop-shadow(var(--led-glow) currentColor);
 }
 .detail-link {
   font-family: var(--f-mono);
@@ -1034,25 +1270,26 @@ table.data td.num {
   margin-left: 0.45rem;
   vertical-align: 0.2em;
 }
+/* border/radius now shared with .board-house/.state above (the "board-style
+   states" treatment: same frame recipe wherever the board has nothing to show) */
 .sparse-history {
-  border: 2px dashed var(--rule-strong);
-  border-radius: 4px;
+  background: var(--surface-2);
   padding: 1.1rem 1.25rem;
-}
-.sparse-history .field-label {
-  color: var(--signal-text);
 }
 .sparse-history p {
   margin: 0.4rem 0 0;
+  /* --muted was darkened specifically to clear 4.5:1 on --surface-2 (see its
+     :root comment) — same guarantee applies here now that the field uses that bg */
   color: var(--muted);
   max-width: 52ch;
 }
 
 /* ── states ─────────────────────────────────────────────────────────────── */
+/* board-state treatment: a lit --surface-2 field in the same 2px frame as the
+   fare board itself (shared rule above), not a plain panel — empty/error reads
+   as "the board with nothing on it" rather than a generic message box. */
 .state {
-  border: 2px dashed var(--rule-strong);
-  border-radius: 4px;
-  background: var(--surface);
+  background: var(--surface-2);
   padding: 2.5rem 1.75rem;
   max-width: 640px;
 }
@@ -1062,13 +1299,40 @@ table.data td.num {
     padding: 1.75rem 1.25rem;
   }
 }
-.state .state-tag {
+/* .sparse-history .field-label ("Just started tracking") gets the same LED
+   heading treatment as the board-state tags — grouped here rather than
+   duplicated, since it's the identical recipe on the same --surface-2 field */
+.state .state-tag,
+.sparse-history .field-label {
   font-family: var(--f-mono);
   font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  /* wider than the standard .field-label 0.12em — an LED-style board heading,
+     not a field caption */
+  letter-spacing: 0.3em;
   text-transform: uppercase;
+  /* --signal-text is pre-verified >=4.5:1 on --surface-2 in both themes (see the
+     --signal-text darkening note near its :root definition) */
   color: var(--signal-text);
+}
+/* flanking dashes are decoration, not copy: generated content lives outside the
+   DOM text node, so the state-copy tests (which read the element's plain text,
+   e.g. "Standby") are unaffected. Plain ASCII hyphens, not an em/en dash — this
+   project's copy rules ban that character even as decoration. */
+.state .state-tag::before,
+.sparse-history .field-label::before {
+  content: '- ';
+}
+.state .state-tag::after,
+.sparse-history .field-label::after {
+  content: ' -';
+}
+/* ErrorState's "Out of service" heading needs its own color (distinct from the
+   default signal-text LED): raw --bad only clears ~3.8:1 on the new --surface-2
+   field in light mode (fails 4.5:1); --bad-text clears it in both themes
+   (light #a82b1f/#d5d2c6 ≈4.57:1, dark #ff5a4a/#171d29 ≈5.48:1) */
+.state .state-tag--bad {
+  color: var(--bad-text);
 }
 /* sanctioned exception to the unified 1.1rem h2: empty/error states need a bigger
    focal headline, and this is scoped to .state so it never leaks into section heads */
@@ -1078,6 +1342,8 @@ table.data td.num {
 }
 .state p {
   margin: 0;
+  /* --muted was darkened specifically to clear 4.5:1 on --surface-2 (see its
+     :root comment) — same guarantee applies here now that the field uses that bg */
   color: var(--muted);
   max-width: 46ch;
 }
@@ -1098,6 +1364,28 @@ table.data td.num {
 @keyframes shimmer {
   to {
     background-position: -200% 0;
+  }
+}
+/* press-state + tab-underline transforms are feedback, not decoration, but still
+   motion — drop only the new transform transitions (the pre-existing border/background/
+   color ones above are outside this task's scope and stay as they were). */
+@media (prefers-reduced-motion: reduce) {
+  .btn {
+    transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+  }
+  .btn-row {
+    transition: border-color 0.12s ease, background 0.12s ease;
+  }
+  .chip,
+  .choice,
+  .tab-indicator {
+    transition: none;
+  }
+  .btn:active,
+  .btn-row:active,
+  .chip:active,
+  .choice:active {
+    transform: none;
   }
 }
 
@@ -1231,6 +1519,15 @@ table.data td.num {
   color: var(--signal-2);
 }
 
+/* press state, added alongside (not inside) the block above so it stays untouched:
+   same 1px-nudge treatment as the other button-likes (.btn/.btn-row/.chip). */
+.choice {
+  transition: transform 0.1s ease-out;
+}
+.choice:active {
+  transform: translateY(1px);
+}
+
 .legend-label {
   font-size: 0.82rem;
   color: var(--muted);
@@ -1344,6 +1641,14 @@ table.data td.num {
 .flight-card .fc-meta {
   color: var(--muted);
 }
+/* OptionPriceChart's card delta line: falling price reads as good news, rising
+   as bad, regardless of the number's own sign — see describeDelta(). */
+.flight-card .fc-delta.good {
+  color: var(--good);
+}
+.flight-card .fc-delta.bad {
+  color: var(--bad);
+}
 /* the hit circles are transparent, so a keyboard user needs a visible ring to
    tell which point currently has focus. */
 .hit-target:focus-visible {
@@ -1360,4 +1665,47 @@ table.data td.num {
    earlier .flight-card rule; this one wins because it's declared later. */
 .flight-card {
   max-width: min(240px, calc(100% - 16px));
+}
+
+/* ── mixed-route visibility (Variant A) ─────────────────────────────────────
+   A round trip whose return leg lands at/departs from different airports than
+   the outbound pair gets a small, honest callout on each surface instead of
+   silently reading as a symmetric trip. Token-based so both themes hold. */
+
+/* CheapestList: a small mono line under the main route, mixed rows only —
+   half a size down from .c-route, with the "ret" word itself signal-tinted. */
+.route-ret {
+  font-family: var(--f-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  margin-top: 0.25rem;
+  white-space: nowrap;
+}
+.route-ret .ret-label {
+  color: var(--signal-text);
+  text-transform: lowercase;
+  margin-right: 0.3rem;
+}
+
+/* OptionDetail leg cards: a route line under the heading, same size on both
+   legs; .differs (Return card only, mixed trips only) tints it and pairs with
+   the .ret-airports "different airports" note below. */
+.leg-route {
+  font-family: var(--f-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0.1rem 0 0.6rem;
+}
+.leg-route.differs {
+  color: var(--signal-text);
+}
+
+/* Shared signal accent for return-airports call-outs: PriceGraph's hover-card
+   ret line and OptionDetail's header subline / Return leg-route note. */
+.ret-airports {
+  color: var(--signal-text);
+  font-weight: 600;
 }
